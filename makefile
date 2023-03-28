@@ -1,6 +1,6 @@
 .PHONY: clean all
 PKG += `pkg-config --cflags --libs libcurl fmt opencv4`
-PKG += -I./third/ -L./third/ -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/
+PKG += -I./third/ -L./third/ -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/ -I./third/mosquitto-2.0.15/include -L./third/mosquitto-2.0.15/lib
 FLAGS += -g -std=c++17
 
 test.out:image_detect.o test.cpp

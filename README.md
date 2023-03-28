@@ -3,9 +3,9 @@
 ### 服务依赖库
 |library|version|
 |-----|-----|
-|nlohmann/json|1.0|
+|nlohmann/json|3.11.2|
 |libcurl|8.4.0|
-|fmt|1.0|
+|fmt|10.1.1|
 
 ### 使用make安装/卸载服务
 1. 编译生成目标文件:make
@@ -28,6 +28,3 @@
 2. journalctl默认将日志放置在内存中,要想持久保存日志,请将/etc/systemd/journald.conf中的Storage值赋为persistent
 3. 日志默认持久化路径是:/var/log/journal/
 4. journalctl查看日志依赖正确的时间设置,请务必开启NTP服务,否则日志顺序可能不正确
-5. 在newLaunch.cpp头部可定义宏ENABLE_MODBUSPP_LOGGING或ENABLE_MOSQ_LOGGING,以开启mosbusTCP或MQTT的log
-
-### 修改相关参数
