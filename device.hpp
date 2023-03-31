@@ -1,49 +1,95 @@
+#pragma once
+
 #include "json.hpp"
+#include <functional>
+#include <map>
 
 namespace robot_device {
 
+class device {
+public:
+    virtual std::function<json(const json&)> get_action(int action_num) = 0;
+};
 
-class camera {
+class camera : public device {
 public:
     // 检测螺栓
-    json detect_bolt(json args);
+    virtual json detect_bolt(const json& args) = 0;
 
     // 检测仪表
-    json detect_meter(json args);
+    virtual json detect_meter(const json& args) = 0;
 
     // 检测拉杆
-    json detect_pull_rod(json args);
+    virtual json detect_pull_rod(const json& args) = 0;
+
+    std::function<json(const json&)> get_action(int action_num) override {
+        return action_map.at(action_num);
+    }
 
 private:
     // 截图
-    json shot();
+    virtual json shot() = 0;
+
+    // 动作表
+    std::map<int, std::function<json(const json&)>> action_map{
+        {1, std::bind(&camera::detect_bolt, this, std::placeholders::_1)},
+        {2, std::bind(&camera::detect_meter, this, std::placeholders::_1)},
+        {3, std::bind(&camera::detect_pull_rod, this, std::placeholders::_1)},
+    };
 };
 
-class action_body {
+class action_body : public device {
 public:
-    // 速度和方向
-    json direct_speed_move(json args);
+    // 速度和方向模式
+    virtual json direct_speed_move(const json& args) = 0;
+
     // 位置模式
-    json location_speed_move(json args);
+    virtual json location_speed_move(const json& args) = 0;
+
+    std::function<json(const json&)> get_action(int action_num) {
+        return action_map.at(action_num);
+    }
 
 private:
-    json get_status();
+    std::map<int, std::function<json(const json&)>> action_map{
+        {1, std::bind(&action_body::direct_speed_move, this, std::placeholders::_1)},
+        {2, std::bind(&action_body::location_speed_move, this, std::placeholders::_1)},
+    };
+    virtual json get_status() = 0;
 };
 
-class ptz {
+class ptz : public device {
 public:
-    json set_xyz(json args);
+    // 设置云台xyz
+    virtual json set_xyz(const json& args) = 0;
+
+    std::function<json(const json&)> get_action(int action_num) {
+        return action_map.at(action_num);
+    }
 
 private:
-    json get_status();
+    std::map<int, std::function<json(const json&)>> action_map{
+        {1, std::bind(&ptz::set_xyz, this, std::placeholders::_1)},
+    };
+
+    virtual json get_status() = 0;
 };
 
-class lamp {
+class lamp : public device {
 public:
-    json set_light(json args);
+    // 设置灯亮度
+    virtual json set_light(const json& args) = 0;
+
+    std::function<json(const json&)> get_action(int action_num) {
+        return action_map.at(action_num);
+    }
 
 private:
-    json get_status();
+    std::map<int, std::function<json(const json&)>> action_map{
+        {1, std::bind(&lamp::set_light, this, std::placeholders::_1)},
+    };
+
+    virtual json get_status() = 0;
 };
 
 } // namespace robot_device
