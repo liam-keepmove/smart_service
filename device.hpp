@@ -8,6 +8,12 @@ namespace robot_device {
 
 class device {
 public:
+    // 所有设备都需要有暂停函数
+    virtual void stop() {}
+
+    // 所有设备都需要有初始化函数
+    virtual void init() {}
+
     virtual std::function<json(const json&)> get_action(int action_num) = 0;
 };
 

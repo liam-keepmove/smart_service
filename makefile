@@ -13,7 +13,7 @@ task.o:task.hpp task.cpp robot.hpp json.hpp
 	g++ ${FLAGS} -c task.cpp -latomic
 
 device_mqtt.o:device_mqtt.hpp device_mqtt.cpp device.hpp
-	g++ ${FLAGS} -c device_mqtt.cpp -lfmt
+	g++ ${FLAGS} -c device_mqtt.cpp -lfmt -latomic
 
 image_detect.o:image_detect.hpp image_detect.cpp
 	g++ ${FLAGS} -c image_detect.cpp ${PKG}

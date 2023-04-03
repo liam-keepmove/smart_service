@@ -145,6 +145,7 @@ struct timed_task {
 struct timed_task_set {
 public:
     std::vector<timed_task> timed_task_list;
+
     timed_task_set(json timed_task_json) {
     }
 

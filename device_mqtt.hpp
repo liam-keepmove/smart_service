@@ -1,6 +1,7 @@
 #pragma once
 
 #include "device.hpp"
+#include <atomic>
 
 namespace robot_device {
 class camera_mqtt : public camera {
@@ -16,10 +17,17 @@ private:
 };
 
 class action_body_mqtt : public action_body {
+    enum { RUN = 0,
+           STOP = 1 };
+
+    std::atomic_int status = STOP;
+
 public:
     json direct_speed_move(const json& args) override;
 
     json location_speed_move(const json& args) override;
+
+    void stop() override;
 
 private:
     json get_status() override;

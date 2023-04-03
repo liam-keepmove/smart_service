@@ -31,6 +31,7 @@ json camera_mqtt::shot() {
 }
 
 json action_body_mqtt::direct_speed_move(const json& args) {
+    status = RUN;
     json result;
     result["__PRETTY_FUNCTION__"] = __PRETTY_FUNCTION__;
     result["args"] = args;
@@ -38,10 +39,16 @@ json action_body_mqtt::direct_speed_move(const json& args) {
 }
 
 json action_body_mqtt::location_speed_move(const json& args) {
+    status = RUN;
     json result;
     result["__PRETTY_FUNCTION__"] = __PRETTY_FUNCTION__;
     result["args"] = args;
     return result;
+}
+
+void action_body_mqtt::stop() {
+    status = STOP;
+    return;
 }
 
 json action_body_mqtt::get_status() {
