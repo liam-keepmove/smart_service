@@ -6,6 +6,7 @@
 |nlohmann/json|3.11.2|
 |libcurl|8.4.0|
 |fmt|10.1.1|
+|spdlog|1.12.0|
 
 ### 使用make安装/卸载服务
 1. 编译生成目标文件:make

@@ -76,6 +76,7 @@ json task::generate_feedback(int active_no, int status, std::string result, std:
 
 void task::run() {
     using namespace std::chrono_literals;
+    println("{}", generate_feedback(0, PEND_EXEC, "任务将要开始了").dump(4)); // 任务执行中反馈
     status = EXECING;
     active_no = 0;
     ++executed_count;
@@ -96,8 +97,8 @@ void task::run() {
             println("{}", generate_feedback(active_no, EXEC_RESULT, result.dump(0), "动作执行完成:" + active.remark).dump(4)); // 任务执行结果反馈
         }
     }
-    println("{}", generate_feedback(active_no, END).dump(4)); // 任务结束反馈
     status = END;
+    println("{}", generate_feedback(active_no, END).dump(4)); // 任务结束反馈
 }
 
 void task::pause() {

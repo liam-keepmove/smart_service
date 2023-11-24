@@ -9,19 +9,19 @@
 using fmt::print;
 using fmt::println;
 
-const char* brokerIP = "192.168.2.167";
-const int brokerPort = 1883;
-const char* brokerUsername = "admin";  // mosquitto推荐空账号密码设置为nullptr
-const char* brokerPassword = "public"; // mosquitto推荐空账号密码设置为nullptr
-const char* mqttSessionID = nullptr;   // mqtt session id,决定是否保留消息会话
-const int brokerKeepAlive = 60;        // mqtt保持连接的时间,单位秒
+const char* broker_ip = "127.0.0.1";
+const int broker_port = 1883;
+const char* broker_username = "admin";  // mosquitto推荐空账号密码设置为nullptr
+const char* broker_password = "public"; // mosquitto推荐空账号密码设置为nullptr
+const char* mqtt_client_id = nullptr;   // mqtt session id,决定是否保留消息会话
+const int broker_keep_alive = 60;       // mqtt保持连接的时间,单位秒
+const std::vector<std::string> ctrl_topic_list{"/SmartSer/Pad/Ctrl", "/SmartSer/PanTilt/Ctrl"};
 
-/*
-void mqttWorker() {
+void mqtt_worker() {
     int rc = mosquitto_lib_init();
     if (rc != MOSQ_ERR_SUCCESS)
         THROW_RUNTIME_ERROR(std::string("Failed to init-mosquitto.") + mosquitto_strerror(rc));
-    mosquitto* mosq = mosquitto_new(mqttSessionID, true, nullptr);
+    mosquitto* mosq = mosquitto_new(mqtt_client_id, true, nullptr);
     if (mosq == nullptr)
         THROW_RUNTIME_ERROR(std::string("Failed to create mosquitto object."));
 
@@ -33,11 +33,14 @@ void mqttWorker() {
         }
         print("mqtt connection is successful\n");
 
-        // Subscribe topic and add the subscribed message to the receive queue
-        print("Prepare to subscribe {} topics.\n", ctrlTopicName);
-        int rc = mosquitto_subscribe(mosq, nullptr, ctrlTopicName, RecvQoS);
-        if (rc != MOSQ_ERR_SUCCESS) {
-            THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
+        for (int i = 0; i < ctrl_topic_list.size(); ++i) {
+            const auto& topic = ctrl_topic_list[i];
+            // Subscribe topic and add the subscribed message to the receive queue
+            print("Prepare to subscribe {} topics.\n", topic);
+            int rc = mosquitto_subscribe(mosq, new int(i), topic.c_str(), 2);
+            if (rc != MOSQ_ERR_SUCCESS) {
+                THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
+            }
         }
     });
 
@@ -45,21 +48,27 @@ void mqttWorker() {
     mosquitto_subscribe_callback_set(mosq, [](mosquitto*, void*, int, int qosCount, const int* grantedQos) {
         for (int i = 0; i < qosCount; ++i) {
             if (grantedQos[i] >= 0 && grantedQos[i] <= 2) {
-                print("The subscription of No.{} is successful, and the qos assigned by the server is {}\n", i, grantedQos[i]);
+                print("The subscription name of {} is successful, and the qos assigned by the server is {}\n", ctrl_topic_list[i], grantedQos[i]);
             } else if (grantedQos[i] == 0x80) {
                 THROW_RUNTIME_ERROR("No." + std::to_string(i) + " Subscribe failed.");
             } else {
                 THROW_RUNTIME_ERROR("Error: Subscription return code exception");
             }
         }
-        print("topic({}) subscription is successful\n", ctrlTopicName);
     });
 
-    mosquitto_message_callback_set(mosq, [](mosquitto*, void*, const mosquitto_message* msg) {
+    mosquitto_message_callback_set(mosq, [](mosquitto* mosq, void*, const mosquitto_message* msg) {
         if (msg == nullptr || msg->payload == nullptr) {
             THROW_RUNTIME_ERROR(std::string("There is a problem with the mosquitto message."));
         }
-        println("recv msg");
+        // 注意! 此回调结束后msg被清理,但由于这里是同步发送,所以不需要拷贝msg
+        int rc = mosquitto_publish(mosq, nullptr, strchr(msg->topic + 1, '/'), msg->payloadlen, msg->payload, 2, false);
+        if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
+            println("Failed to publish message:{} ", mosquitto_strerror(rc));
+            println("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
+        } else {
+            println("转发成功");
+        }
     });
 
     mosquitto_unsubscribe_callback_set(mosq, [](mosquitto*, void*, int) {
@@ -88,14 +97,14 @@ void mqttWorker() {
     });
 #endif
 
-    rc = mosquitto_username_pw_set(mosq, brokerUsername, brokerPassword);
+    rc = mosquitto_username_pw_set(mosq, broker_username, broker_password);
     if (rc != MOSQ_ERR_SUCCESS)
         THROW_RUNTIME_ERROR(std::string("Failed to set username and password.") + mosquitto_strerror(rc));
 
     println("connecting...");
-    rc = mosquitto_connect(mosq, brokerIP, brokerPort, brokerKeepAlive);
+    rc = mosquitto_connect(mosq, broker_ip, broker_port, broker_keep_alive);
     while (rc != MOSQ_ERR_SUCCESS) {
-        println("Failed to connect mosquitto broker: {}", mosquitto_strerror(rc)));
+        println("Failed to connect mosquitto broker: {}", mosquitto_strerror(rc));
         println("reconnect after 3 seconds");
         sleep(3);
         rc = mosquitto_reconnect(mosq);
@@ -105,16 +114,7 @@ void mqttWorker() {
     rc = mosquitto_loop_start(mosq);
     if (rc != MOSQ_ERR_SUCCESS)
         THROW_RUNTIME_ERROR(std::string("mosquitto_loop_start Error: ") + mosquitto_strerror(rc));
-    std::string statusJsonStr;
-    while (true) {
-        rc = mosquitto_publish(mosq, nullptr, statusTopicName, statusJsonStr.size(), statusJsonStr.c_str(), SendQoS, false);
-        if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-            println("Failed to publish message:{} ", mosquitto_strerror(rc));
-            println("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-        }
-    }
 }
-*/
 
 using json = nlohmann::ordered_json;
 
