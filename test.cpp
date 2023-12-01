@@ -5,6 +5,7 @@
 #include <fmt/core.h>
 #include <iostream>
 #include <mosquitto.h>
+#include <regex>
 #include <string_view>
 using fmt::print;
 using fmt::println;
@@ -127,7 +128,7 @@ struct timed_task {
         : cron_expr(cron_expr), username(username), command(command) {
     }
 
-    std::string to_cron_str() {
+    std::string to_cron_str() const {
         return fmt::format("{cron_expr} {username} {command}", fmt::arg("cron_expr", cron_expr), fmt::arg("username", username), fmt::arg("command", command));
     }
 
@@ -143,77 +144,73 @@ struct timed_task {
 };
 
 struct timed_task_set {
+private:
+    std::string cron_file_path;
+
 public:
     std::vector<timed_task> timed_task_list;
 
-    timed_task_set(json timed_task_json) {
+    timed_task_set(const std::string& cron_file_path)
+        : cron_file_path(cron_file_path) {
+        std::ifstream cron_file(cron_file_path);
+        if (!cron_file.is_open()) {
+            THROW_RUNTIME_ERROR("Unable to open cron_file:" + cron_file_path);
+        }
+        std::regex pattern(R"((^[-*?/,a-zA-Z0-9]+\s+[-*?/,a-zA-Z0-9]+\s+[-*?/,a-zA-Z0-9]+\s+[-*?/,a-zA-Z0-9]+\s+[-*?/,a-zA-Z0-9]+)\s+([\w]{1,32})\s+(.+)$)");
+        std::smatch matches;
+        std::string line;
+        while (std::getline(cron_file >> std::ws, line)) {
+            if (line.empty() && line[0] == '#') {
+                continue;
+            }
+            if (std::regex_match(line, matches, pattern)) {
+                timed_task_list.emplace_back(matches[1].str(), matches[2].str(), matches[3].str());
+            }
+        }
+        cron_file.close();
+    }
+
+    void update_cron_file(const std::string& update_file_path = "") {
+        if (!update_file_path.empty()) {
+            cron_file_path = update_file_path;
+        }
+        std::ofstream cron_file(cron_file_path);
+        if (!cron_file.is_open()) {
+            THROW_RUNTIME_ERROR("Unable to open cron_file:" + cron_file_path);
+        }
+        cron_file << "SHELL=/bin/sh" << std::endl;
+        cron_file << "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" << std::endl;
+        cron_file << "TIMED_TASK_PATH=" << std::filesystem::current_path() / "timed_task" << std::endl;
+        for (const auto& task : timed_task_list) {
+            cron_file << task.to_cron_str() << std::endl;
+        }
+        cron_file.close();
     }
 
     friend void to_json(json& j, const timed_task_set& ts) {
         json temp;
         for (const auto& task : ts.timed_task_list) {
-            temp.emplace_back(json::parse(task));
+            temp.emplace_back(task);
         }
-        j["timed_task_list"] = temp;
+        j["timed_task_set"] = temp;
     }
 
     friend void from_json(const json& j, timed_task_set& ts) {
         ts.timed_task_list.clear();
-        for (const auto& task : j.at("timed_task_list")) {
-            ts.timed_task_list.emplace_back(task);
+        if (j.contains("timed_task_set")) {
+            json timed_task_set_array = j.at("timed_task_set");
+            if (timed_task_set_array.is_array()) {
+                for (const auto& task : timed_task_set_array) {
+                    ts.timed_task_list.emplace_back(task);
+                }
+            } else {
+                THROW_RUNTIME_ERROR("field with \"timed_task_set\" must be array of json");
+            }
+        } else {
+            THROW_RUNTIME_ERROR("field with \"timed_task_set\" must exist");
         }
     }
 };
-
-void timed_task_create(nlohmann::json task) {
-    std::string content = R"({"key": "Test"})";
-    std::string cron = "* * * * *";
-    std::string task_id = "3a0eaaf2-7464-30d0-16f2-81d31620ae39";
-    std::string dirPath = "./timed_task";
-    std::string task_file_name = task_id + ".json";
-    std::string filePath = dirPath + "/" + task_file_name;
-    for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
-        if (entry.path().filename() == task_file_name) {
-            throw std::runtime_error("File already exists: " + filePath);
-        }
-    }
-    std::ofstream task_file(filePath);
-    if (!task_file.is_open()) {
-        throw std::runtime_error("Unable to open file for writing: " + filePath);
-    }
-    task_file << content;
-    task_file.close();
-    std::string command = fmt::format("cat ${{TIMED_TASK_PATH}}/{task_file_name} > ${{TIMED_TASK_PATH}}/current.json && killall -s SIGUSR1 test.out", fmt::arg("task_file_name", task_file_name));
-    std::string str = fmt::format("{cron_expr} {username} {command}", fmt::arg("cron_expr", "* * * * *"), fmt::arg("username", "root"), fmt::arg("command", command));
-    std::string cronFilePath = "/etc/cron.d/timed_task_robot";
-    std::string additionalContent = str;
-    if (std::filesystem::is_regular_file(cronFilePath)) {
-        try {
-            std::ofstream cron_file(cronFilePath, std::ios::app);
-            if (!cron_file.is_open()) {
-                throw std::runtime_error("Unable to open file for writing: " + cronFilePath);
-            }
-            cron_file << str << std::endl;
-            cron_file.close();
-        } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
-        }
-    } else {
-        try {
-            std::ofstream cron_file(cronFilePath);
-            if (!cron_file.is_open()) {
-                throw std::runtime_error("Unable to open file for writing: " + cronFilePath);
-            }
-            cron_file << "SHELL=/bin/sh" << std::endl;
-            cron_file << "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" << std::endl;
-            cron_file << "TIMED_TASK_PATH=" << std::filesystem::current_path() / "timed_task" << std::endl;
-            cron_file << str << std::endl;
-            cron_file.close();
-        } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
-        }
-    }
-}
 
 int main() {
     //    std::string json_str = R"(

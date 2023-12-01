@@ -3,11 +3,11 @@ PKG += -I./third/ -L./third/ -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/ -I.
 PKG += `pkg-config --cflags --libs libcurl fmt opencv4`
 FLAGS += -g -std=c++17
 
+smart_service.out:smart_service.cpp task.o device_mqtt.o json.hpp
+	g++ ${FLAGS} smart_service.cpp task.o device_mqtt.o ${PKG} -o smart_service.out -lfmt -lpthread
+
 test.out:image_detect.o test.cpp
 	g++ ${FLAGS} ${PKG} test.cpp image_detect.o -o test.out
-
-smart_service.out:smart_service.cpp task.o device_mqtt.o json.hpp
-	g++ ${FLAGS} smart_service.cpp task.o device_mqtt.o ${PKG} -o smart_service.out -lfmt
 
 task.o:task.hpp task.cpp robot.hpp json.hpp
 	g++ ${FLAGS} -c task.cpp -latomic

@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
 
 #define THROW_RUNTIME_ERROR(WHAT) \
     throw std::runtime_error(std::string(__FILE__ ":" + std::to_string(__LINE__) + "-->" + __PRETTY_FUNCTION__ + ":") + (WHAT))
@@ -67,3 +68,20 @@ public:
         remove(pidFilePath.c_str());
     }
 };
+
+std::vector<std::string> split(const std::string& s, const std::string& d) {
+    if (s.empty())
+        return {};
+    std::vector<std::string> res;
+    std::string strs = s + d;
+    size_t pos = strs.find(d);
+    size_t len = strs.size();
+    while (pos != std::string::npos) {
+        std::string x = strs.substr(0, pos);
+        if (x != "")
+            res.push_back(x);
+        strs = strs.substr(pos + d.size(), len);
+        pos = strs.find(d);
+    }
+    return res;
+}

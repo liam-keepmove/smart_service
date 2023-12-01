@@ -30,12 +30,12 @@ json camera_mqtt::shot() {
     return result;
 }
 
-json action_body_mqtt::direct_speed_move(const json& args) {
-    status = RUN;
-    json result;
-    result["__PRETTY_FUNCTION__"] = __PRETTY_FUNCTION__;
-    result["args"] = args;
-    return result;
+json action_body_mqtt::speed_front_move(const json& args) {
+    return json();
+}
+
+json action_body_mqtt::speed_back_move(const json& args) {
+    return json();
 }
 
 json action_body_mqtt::location_speed_move(const json& args) {

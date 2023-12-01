@@ -23,7 +23,9 @@ class action_body_mqtt : public action_body {
     std::atomic_int status = STOP;
 
 public:
-    json direct_speed_move(const json& args) override;
+    json speed_front_move(const json& args) override;
+
+    json speed_back_move(const json& args) override;
 
     json location_speed_move(const json& args) override;
 
