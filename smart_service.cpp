@@ -15,62 +15,7 @@ using fmt::print;
 using fmt::println;
 using namespace std::chrono_literals;
 
-json active1 = json::parse(R"(
-    {
-        "no": 1,
-        "device_code": 1,
-        "active_code": 1,
-        "active_args": "{\"location\": 50, \"speed\": 50}"
-    }
-)");
-
-json active2 = json::parse(R"(
-    {
-        "no": 2,
-        "device_code": 3,
-        "active_code": 1,
-        "active_args": "{\"rect\": [132,123,31,11], \"name\": \"指针仪表\"}"
-    }
-)");
-
-json active3 = json::parse(R"(
-    {
-        "no": 3,
-        "device_code": 1,
-        "active_code": 2,
-        "active_args": "{\"direction\": \"back\", \"speed\": 50}"
-    }
-)");
-
-json task_json = json::parse(R"(
-{
-    "id": "999666",
-    "type": 3,
-    "priority": 1,
-    "remark": "快速巡检",
-    "tag": "",
-    "action_list": [
-        {
-            "no": 2,
-            "device_code": 1,
-            "active_code": 2, 
-            "active_args": "{\"direction\": \"back\", \"speed\": 50}",
-            "remark": "再以方向模式回来,限位器会让其自行停止",
-            "tag": ""
-        },
-        {
-            "no": 1,
-            "device_code": 1,
-            "active_code": 1,
-            "active_args": "{\"location\": 200, \"speed\": 50}",
-            "remark": "直接以位置模式去终点",
-            "tag": ""
-        }
-    ]
-}
-)");
-
-std::atomic<bool> is_exit = false;
+mosquitto* mosq = nullptr; // 全局变量实现单例模式
 
 class smart_service {
 public:
@@ -78,21 +23,21 @@ public:
     robot bot;
     const char* broker_ip = "127.0.0.1";
     const int broker_port = 1883;
-    const char* broker_username = "admin";                                                                                                    // mosquitto推荐空账号密码设置为nullptr
-    const char* broker_password = "public";                                                                                                   // mosquitto推荐空账号密码设置为nullptr
-    const char* mqtt_client_id = nullptr;                                                                                                     // mqtt session id,决定是否保留消息会话
-    const int broker_keep_alive = 5;                                                                                                          // mqtt心跳时间,单位秒,注意,mqtt的服务端主动断开客户端的时间是1.5倍的心跳时间
-    std::array<const char*, 3> smart_ctrl_topic_list = {"/SmartSer/Pad/Ctrl/+", "/SmartSer/Robot/CtrlMove/+", "/SmartSer/Robot/CtrlOther/+"}; // 机器人实时控制 订阅
-    const char* task_recv_topic = "/Robot/Task/500d28747093ca040eac1711";                                                                     // 任务控制 订阅
-    const char* task_feedback_topic = "/Robot/TaskStatus/500d28747093ca040eac1711";                                                           // 任务状态 发布
-    mosquitto* mosq = nullptr;
-    ThreadSafeQueue<mosquitto_message*> mqtt_msg_queue; // mqtt消息队列
+    const char* broker_username = "admin";                                                                                                                                                                         // mosquitto推荐空账号密码设置为nullptr
+    const char* broker_password = "abcd1234";                                                                                                                                                                      // mosquitto推荐空账号密码设置为nullptr
+    const char* mqtt_client_id = "mosquitto_hj";                                                                                                                                                                   // mqtt session id,决定是否保留消息会话
+    const int broker_keep_alive = 10;                                                                                                                                                                              // mqtt心跳时间,单位秒,注意,mqtt的服务端主动断开客户端的时间是1.5倍的心跳时间
+    std::array<const char*, 3> smart_ctrl_topic_list = {"/SmartSer/Pad/Ctrl/500d28757093ca040eb09711", "/SmartSer/Robot/CtrlMove/500d28757093ca040eb09711", "/SmartSer/Robot/CtrlOther/500d28757093ca040eb09711"}; // 机器人实时控制 订阅
+    const char* task_recv_topic = "/SmartSer/Robot/Task/500d28757093ca040eb09711";                                                                                                                                 // 任务控制 订阅
+    const char* task_feedback_topic = "/SmartSer/Robot/TaskStatus/500d28757093ca040eb09711";                                                                                                                       // 任务状态 发布
+    ThreadSafeQueue<mosquitto_message*> mqtt_msg_queue;                                                                                                                                                            // mqtt消息队列
 
     smart_service(robot&& b)
         : bot(std::move(b)) {
     }
 
     ~smart_service() {
+        mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
     }
 
@@ -245,7 +190,6 @@ public:
         } else {
             println("forward success:{}->{}", msg->topic, strchr(msg->topic + 1, '/'));
         }
-        mosquitto_message_free(&msg); // 记得释放
     }
 
     // 后端发来的任务相关请求
@@ -308,19 +252,21 @@ public:
         // 串行路由各种后端来的消息
         while (true) {
             mosquitto_message* msg = nullptr;
-            mqtt_msg_queue.pop(msg); // 注意,is_exit的退出flag可能会阻塞在这里
+            mqtt_msg_queue.pop(msg);
             if (std::find_if(smart_ctrl_topic_list.begin(), smart_ctrl_topic_list.end(), [msg](const char* topic) { return std::strcmp(msg->topic, topic) == 0; }) != smart_ctrl_topic_list.end()) {
                 // 实时控制
                 real_time_ctrl_handler(msg);
             } else if (strcmp(msg->topic, task_recv_topic) == 0) {
-                if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) {
+                if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) { // debug退出方式
                     println("exit");
                     break;
                 }
                 // 任务控制
                 task_handler((char*)(msg->payload));
-                mosquitto_message_free(&msg); // 记得释放
+            } else {
+                println("unknown message:\ntopic:{}\ncontent:{}", msg->topic, (char*)msg->payload);
             }
+            mosquitto_message_free(&msg); // 记得释放
         }
         // 程序结束前取消任务
         current_task.cancel();
@@ -330,9 +276,9 @@ public:
 int main() {
     try {
         robot mapad;
-        // mapad.device["1"] = std::make_unique<robot_device::action_body_mqtt>();
-        mapad.device["2"] = std::make_unique<robot_device::ptz_mqtt>();
-        mapad.device["3"] = std::make_unique<robot_device::camera_mqtt>();
+        mapad.device["1"] = std::make_unique<robot_device::action_body_mqtt>();
+        mapad.device["2"] = std::make_unique<robot_device::camera_mqtt>();
+        mapad.device["3"] = std::make_unique<robot_device::lamp_mqtt>();
         smart_service smart_ser{std::move(mapad)};
         smart_ser.start_mqtt();
         smart_ser.mqtt_msg_handler();

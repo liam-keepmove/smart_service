@@ -86,10 +86,10 @@ public:
     virtual json set_volume(const json& args) = 0;
 
     // 左舵机控制
-    virtual json set_left_servo() = 0;
+    virtual json set_left_servo(const json& args) = 0;
 
     // 右舵机控制
-    virtual json set_right_servo() = 0;
+    virtual json set_right_servo(const json& args) = 0;
 
     std::function<json(const json&)> get_action(std::string action_code) {
         return action_map.at(action_code);
@@ -97,9 +97,21 @@ public:
 
 private:
     std::map<std::string, std::function<json(const json&)>> action_map{
+        {"0", std::bind(&action_body::stop_move, this, std::placeholders::_1)},
         {"1", std::bind(&action_body::speed_front_move, this, std::placeholders::_1)},
         {"2", std::bind(&action_body::speed_back_move, this, std::placeholders::_1)},
-        {"3", std::bind(&action_body::stop_move, this, std::placeholders::_1)},
+        {"3", std::bind(&action_body::location_speed_move, this, std::placeholders::_1)},
+        {"4", std::bind(&action_body::to_charge, this, std::placeholders::_1)},
+        {"5", std::bind(&action_body::motor_reset, this, std::placeholders::_1)},
+        {"6", std::bind(&action_body::restart, this, std::placeholders::_1)},
+        {"7", std::bind(&action_body::set_current_location, this, std::placeholders::_1)},
+        {"8", std::bind(&action_body::set_ultrasonic_switch, this, std::placeholders::_1)},
+        {"9", std::bind(&action_body::poweroff, this, std::placeholders::_1)},
+        {"10", std::bind(&action_body::set_front_light, this, std::placeholders::_1)},
+        {"11", std::bind(&action_body::set_back_light, this, std::placeholders::_1)},
+        {"12", std::bind(&action_body::set_volume, this, std::placeholders::_1)},
+        {"13", std::bind(&action_body::set_left_servo, this, std::placeholders::_1)},
+        {"14", std::bind(&action_body::set_right_servo, this, std::placeholders::_1)},
     };
     virtual json get_status() = 0;
 };

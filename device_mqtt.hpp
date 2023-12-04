@@ -2,6 +2,7 @@
 
 #include "device.hpp"
 #include <atomic>
+#include <mosquitto.h>
 
 namespace robot_device {
 class camera_mqtt : public camera {
@@ -17,17 +18,62 @@ private:
 };
 
 class action_body_mqtt : public action_body {
-    enum { RUN = 0,
-           STOP = 1 };
+public:
+    enum { RUNING = 0,
+           STOPPED = 1,
+           REQ_RUN = 2,
+           REQ_STOP = 3,
+    };
 
-    std::atomic_int status = STOP;
+private:
+    std::atomic_int request = STOPPED;
+    std::atomic_int status = STOPPED;
 
 public:
+    action_body_mqtt();
+    ~action_body_mqtt();
+
+    json stop_move(const json& args) override;
+
     json speed_front_move(const json& args) override;
 
     json speed_back_move(const json& args) override;
 
+    // 位置模式
     json location_speed_move(const json& args) override;
+
+    // 回程充电
+    json to_charge(const json& args) override;
+
+    // 电机复位
+    json motor_reset(const json& args) override;
+
+    // 机器人重启
+    json restart(const json& args) override;
+
+    // 设置当前位置,为了校准位置
+    json set_current_location(const json& args) override;
+
+    // 设置超声波开关
+    json set_ultrasonic_switch(const json& args) override;
+
+    // 关机
+    json poweroff(const json& args) override;
+
+    // 控制其他-前灯
+    json set_front_light(const json& args) override;
+
+    // 控制其他-后灯
+    json set_back_light(const json& args) override;
+
+    // 音量调节
+    json set_volume(const json& args) override;
+
+    // 左舵机控制
+    json set_left_servo(const json& args) override;
+
+    // 右舵机控制
+    json set_right_servo(const json& args) override;
 
     void stop() override;
 
