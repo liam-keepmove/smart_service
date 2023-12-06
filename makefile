@@ -1,4 +1,5 @@
 .PHONY: clean all
+
 PKG += -I./third/ -L./third/ -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/ -I./third/mosquitto-2.0.15/include -L./third/mosquitto-2.0.15/lib -L./third/mosquitto-2.0.15/lib/cpp -lmosquitto
 PKG += `pkg-config --cflags --libs libcurl fmt opencv4`
 FLAGS += -g -std=c++17
