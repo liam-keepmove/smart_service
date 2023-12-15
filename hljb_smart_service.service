@@ -1,0 +1,24 @@
+[Unit]
+Description=real-time ctrl and task , timed task
+# 取消一定时间段内重启多少次的规定,因为只要触碰了这个规定,必须手动重启成功一次才能重新计时计数,systemctl reset-failed都不管用,必须成功一次才能开启自动重启
+StartLimitIntervalSec=0
+After=network-online.target multi-user.target
+
+[Service]
+Type=simple
+# makefile会更新根目录
+WorkingDirectory=/root/smart_service
+ExecStart=bash -c "`pwd`/smart_service.out >> `pwd`/logs/output.log"
+ExecStop=-bash -c "`pwd`/mqttx pub -V 3.1.1 --username 'admin' --password 'abcd1234' -h '127.0.0.1' -p 1883 -t '/SmartSer/Debug' -q 2 -m 'debug_exit'"
+ExecStopPost=-sleep 3
+# 除了使用systemd stop service,不然只要关闭就重开
+Restart=always
+# 重启时间间隔
+RestartSec=10s
+StandardInput=null
+StandardOutput=journal
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target
+# 显示指定服务的启动流:systemd-analyze critical-chain xxx.service

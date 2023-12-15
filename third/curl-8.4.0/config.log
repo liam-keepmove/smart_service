@@ -2816,7 +2816,7 @@ configure:25271: checking whether to use builtin CA store of SSL library
 configure:25286: result: no
 configure:25310: checking for library containing psl_builtin
 configure:25340: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccoPl8Mf.o: in function `main':
+/usr/bin/ld: /tmp/ccXI7ABM.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `psl_builtin'
 collect2: error: ld returned 1 exit status
 configure:25340: $? = 1
@@ -2964,7 +2964,7 @@ configure:25360: result: no
 configure:25373: WARNING: libpsl was not found
 configure:25401: checking for library containing gsasl_init
 configure:25431: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccDjm2Gn.o: in function `main':
+/usr/bin/ld: /tmp/ccWlpWYP.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `gsasl_init'
 collect2: error: ld returned 1 exit status
 configure:25431: $? = 1
@@ -8397,7 +8397,7 @@ configure:38200: checking for sys/types.h
 configure:38200: result: yes
 configure:38217: checking if sigsetjmp can be linked
 configure:38246: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccBOqkS7.o: in function `main':
+/usr/bin/ld: /tmp/ccCMamau.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `sigsetjmp'
 collect2: error: ld returned 1 exit status
 configure:38246: $? = 1
@@ -8672,7 +8672,7 @@ configure:38835: checking if strcasecmp might be used
 configure:38841: result: yes
 configure:38860: checking if strcmpi can be linked
 configure:38889: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/cceM9PHf.o: in function `main':
+/usr/bin/ld: /tmp/ccxYX4Xx.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `strcmpi'
 collect2: error: ld returned 1 exit status
 configure:38889: $? = 1
@@ -9609,7 +9609,7 @@ configure:39644: checking if strerror_r might be used
 configure:39650: result: yes
 configure:39689: checking if stricmp can be linked
 configure:39718: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccRHK4Xh.o: in function `main':
+/usr/bin/ld: /tmp/ccszqEoC.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `stricmp'
 collect2: error: ld returned 1 exit status
 configure:39718: $? = 1
@@ -10085,7 +10085,7 @@ configure:40220: $? = 0
 configure:40220: result: yes
 configure:40245: checking for _fseeki64
 configure:40245: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccZXH7VH.o: in function `main':
+/usr/bin/ld: /tmp/cc8CSTc2.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `_fseeki64'
 collect2: error: ld returned 1 exit status
 configure:40245: $? = 1
@@ -10519,7 +10519,7 @@ configure: failed program was:
 configure:40289: result: but still no
 configure:40245: checking for arc4random
 configure:40245: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/cc1dTrCW.o: in function `main':
+/usr/bin/ld: /tmp/cchGBS7G.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `arc4random'
 collect2: error: ld returned 1 exit status
 configure:40245: $? = 1
@@ -10969,7 +10969,7 @@ configure:40245: $? = 0
 configure:40245: result: yes
 configure:40245: checking for getpass_r
 configure:40245: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/cc06So4P.o: in function `main':
+/usr/bin/ld: /tmp/cc52WkaD.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `getpass_r'
 collect2: error: ld returned 1 exit status
 configure:40245: $? = 1
@@ -11435,7 +11435,7 @@ configure:40245: $? = 0
 configure:40245: result: yes
 configure:40245: checking for mach_absolute_time
 configure:40245: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccl30yaI.o: in function `main':
+/usr/bin/ld: /tmp/ccjtgUpq.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `mach_absolute_time'
 collect2: error: ld returned 1 exit status
 configure:40245: $? = 1
@@ -11905,7 +11905,7 @@ configure:40245: $? = 0
 configure:40245: result: yes
 configure:40245: checking for setmode
 configure:40245: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c -lssl -lcrypto -lssl -lcrypto -lz  >&5
-/usr/bin/ld: /tmp/ccrCZawE.o: in function `main':
+/usr/bin/ld: /tmp/ccTxdIIm.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `setmode'
 collect2: error: ld returned 1 exit status
 configure:40245: $? = 1
@@ -12409,7 +12409,7 @@ configure:40956: $? = 0
 configure:40956: result: yes
 configure:40966: checking for pthread_create
 configure:40966: gcc -o conftest -Werror-implicit-function-declaration -O2 -Wno-system-headers       conftest.c  >&5
-/usr/bin/ld: /tmp/ccCGF2FA.o: in function `main':
+/usr/bin/ld: /tmp/ccWEH7zh.o: in function `main':
 conftest.c:(.text.startup+0x8): undefined reference to `pthread_create'
 collect2: error: ld returned 1 exit status
 configure:40966: $? = 1
@@ -12768,28 +12768,20 @@ config.status:1479: creating packages/vms/Makefile
 config.status:1479: creating curl-config
 config.status:1479: creating libcurl.pc
 config.status:1479: creating lib/curl_config.h
-config.status:1660: lib/curl_config.h is unchanged
 config.status:1708: executing depfiles commands
 config.status:1785: cd docs/examples       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd src       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd lib       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd tests/server       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd tests/libtest       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd tests/unit       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1785: cd tests/http/clients       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
-make: Nothing to be done for 'am--depfiles'.
 config.status:1790: $? = 0
 config.status:1708: executing libtool commands
 configure:45098: Configured to build curl/libcurl:

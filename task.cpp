@@ -1,9 +1,9 @@
 #include "task.hpp"
 #include <chrono>
-#include <fmt/core.h>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <thread>
-using fmt::println;
+using namespace std::chrono_literals;
 
 void from_json(const json& j, task::action& a) {
     j.at("no").get_to(a.no);
@@ -17,13 +17,10 @@ void from_json(const json& j, task::action& a) {
 void from_json(const json& j, task& t) {
     j.at("id").get_to(t.id);
     j.at("priority").get_to(t.priority);
+    j.at("max_count").get_to(t.max_count);
+    j.at("executed_count").get_to(t.executed_count);
     j.at("remark").get_to(t.remark);
     j.at("tag").get_to(t.tag);
-    if (j.contains("executed_count"))
-        j.at("executed_count").get_to(t.executed_count);
-    else
-        t.executed_count = 0;
-
     json action_list_array = j.at("action_list");
     if (action_list_array.is_array()) {
         for (auto& action : action_list_array) {
@@ -42,19 +39,27 @@ task::task(const json& task_json) {
     from_json(task_json, *this);
 }
 
-// 默认空任务是END态的.
 task::task() = default;
 
 // 更新任务
 task& task::operator=(const task& t) {
-    this->priority = t.priority;
-    this->active_no = t.active_no;
-    this->remark = t.remark;
+    std::scoped_lock lock(run_sche); // 确保更新的时候,调度器没有运行,防止更改了调度器运行时数据
+    if (this == &t) {
+        return *this;
+    }
     this->id = t.id;
+    this->priority = t.priority;
+    this->max_count = t.max_count;
     this->executed_count = t.executed_count;
+    this->remark = t.remark;
     this->tag = t.tag;
     this->action_list = t.action_list;
+
+    this->active_no = t.active_no;
+    this->bot = t.bot;
     this->status = t.status.load();
+    this->req_status = t.req_status.load();
+
     this->task_will_start_callback = t.task_will_start_callback;
     this->action_start_callback = t.action_start_callback;
     this->action_result_callback = t.action_result_callback;
@@ -81,63 +86,119 @@ json task::generate_feedback(int active_no, int status, const std::string& resul
     return feedback;
 }
 
-void task::run(robot& bot) {
+void task::run(robot& qibot) {
+    std::scoped_lock lock(run_sche); // 同一时刻,只能有一个调度器在运行
+    if (executed_count >= max_count) {
+        spdlog::error("The number of tasks that can be executed is insufficient.");
+        return;
+    }
+    this->bot = &qibot;
     using namespace std::chrono_literals;
 #define XX(callback, json_obj) \
     if (callback != nullptr)   \
         callback(json_obj);
     ++executed_count;
-    XX(task_will_start_callback, generate_feedback(0, PEND_EXEC, "", "The task will start.")); // 任务将要开始的反馈
-    status = EXECING;
+    XX(task_will_start_callback, generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
     active_no = 0;
-    for (const auto& active : action_list) {
-        // 注意,这里需要记得status可以随时被外部修改
-        if (status == CANCEL) {
-            XX(cancel_callback, generate_feedback(active_no, CANCEL)); // 任务取消反馈
-            break;
+    status = EXECING;
+    // 这里只允许更新status,在暂停,恢复,取消函数里只允许更新req_status
+    for (int i = 0; i < action_list.size();) {
+        // 注意,req_status可以随时被外部修改
+        if (req_status == REQ_CANCEL) {
+            if (status == EXECING) {
+                status = CANCEL;
+                XX(cancel_callback, generate_feedback(active_no, CANCEL, "The task will cancel.", tag)); // 任务取消反馈
+                break;
+            }
         }
-        if (status == PAUSE) {
-            XX(pause_callback, generate_feedback(active_no, PAUSE)); // 任务暂停反馈
-            while (status == PAUSE) {
-                std::this_thread::sleep_for(200ms);
+        if (req_status == REQ_RESUME) {
+            if (status == PAUSE)
+                status = EXECING;
+        }
+        if (req_status == REQ_PAUSE) {
+            if (status == EXECING) {
+                status = PAUSE;
+                XX(pause_callback, generate_feedback(active_no, PAUSE, "The task will pause.", tag)); // 任务暂停反馈
+                while (req_status != REQ_RESUME && req_status != REQ_CANCEL) {                        // 暂停时阻塞住
+                    std::this_thread::sleep_for(100ms);
+                }
             }
         }
         if (status == EXECING) {
+            status = EXECING;
+            auto active = action_list.at(i);
             active_no = active.no;
-            XX(action_start_callback, generate_feedback(active_no, EXECING, "", "The action will exec")); // 任务执行中反馈
-            json result = bot.device.at(active.device_code)->get_action(active.active_code)(active.active_args);
-            XX(action_result_callback, generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+            XX(action_start_callback, generate_feedback(active_no, EXECING, "", "The action will exec", active.tag)); // 任务执行中反馈
+            json result = bot->get_device(active.device_code)->get_action(active.active_code)(active.active_args);
+            if (result.contains("emergency_stop")) { // 是暂停导致的返回,那么此动作在恢复时,还要再执行一次,所以i不自增
+
+            } else {
+                // 正常返回,执行下一个动作
+                XX(action_result_callback, generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                ++i;
+            }
         }
     }
+    status = END;
     // 任务结束回调
     XX(over_callback, generate_feedback(active_no, END, "The task is over.", remark, tag));
-    status = END;
 #undef XX
 }
 
 void task::pause() {
-    if (status == PEND_EXEC || status == EXECING) {
-        status = PAUSE;
+    std::scoped_lock lock(control);
+    if (status == EXECING) {
+        req_status = REQ_PAUSE;
         // 停止所有动作,让任务执行循环从EXECING状态的设备阻塞状态返回
-        // for (auto& [number, device] : bot.device) {
-        //     device->stop();
-        // }
+        for (auto& [number, device] : bot->get_device_list()) {
+            device->stop();
+        }
+        std::this_thread::sleep_for(100ms);
+        if (status != PAUSE && status != END) {
+            spdlog::info("waiting for current task pause...");
+            while (status != PAUSE && status != END) {
+                std::this_thread::sleep_for(100ms);
+            }
+        }
     }
 }
 
 void task::resume() {
-    if (status == PAUSE)
-        status = EXECING;
+    std::scoped_lock lock(control);
+    if (status == PAUSE) {
+        req_status = EXECING;
+        if (status != EXECING && status != END) {
+            spdlog::info("waiting for current task resume...");
+            while (status != EXECING && status != END) {
+                std::this_thread::sleep_for(100ms);
+            }
+        }
+    }
 }
 
 void task::cancel() {
-    if (status != CANCEL && status != END) {
-        status = CANCEL;
+    std::scoped_lock lock(control);
+    if (status == EXECING || status == PAUSE) {
+        req_status = REQ_CANCEL;
         // 停止所有动作,让任务执行循环从EXECING状态的设备阻塞状态返回
-        // for (auto& [number, device] : bot.device) {
-        //     device->stop();
-        // }
+        for (auto& [number, device] : bot->get_device_list()) {
+            device->stop();
+        }
+        std::this_thread::sleep_for(100ms);
+        if (!is_over()) {
+            spdlog::info("waiting for current task over...");
+            while (!is_over()) {
+                std::this_thread::sleep_for(100ms);
+            }
+        }
     }
+}
+
+bool task::is_empty() {
+    if (status == INIT)
+        return true;
+    else
+        return false;
 }
 
 bool task::is_over() {

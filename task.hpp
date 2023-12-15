@@ -2,22 +2,33 @@
 
 #include "robot.hpp"
 #include <atomic>
+#include <mutex>
 
 class task {
-private:
-    // 任务控制:开始(动作执行态),暂停(任务暂停态),恢复(动作执行态),取消(任务结束态)
-    // 任务状态反馈:0任务暂停中;1任务待执行;2动作执行中;4任务已正常结束;6任务已取消
+public:
+    // 任务状态:任务开始,任务暂停中,任务执行中,任务结束
+    // 任务主动控制:开始(任务执行态),暂停(任务暂停态),恢复(任务执行态),取消(任务结束态)
+    // 任务消息反馈:1任务开始;0任务暂停中(任务暂停态);2动作执行中(任务执行态);3动作执行结果(任务执行态);4任务结束(任务结束态);6任务取消(任务结束态)
     // 其他消息反馈:7机器异常;8指令异常
-    enum { PAUSE = 0,
-           PEND_EXEC = 1,
+    enum { INIT = -1,
+           PAUSE = 0,
+           START = 1,
            EXECING = 2,
            EXEC_RESULT = 3,
            END = 4,
            CANCEL = 6,
+           REQ_PAUSE,
+           REQ_RESUME,
+           REQ_CANCEL
     };
 
-    // 任务状态,只可能有:任务待执行,任务暂停,任务执行中,任务结束,任务取消
-    std::atomic_int status = END;
+private:
+    std::atomic_int status = INIT;
+    std::atomic_int req_status = INIT;
+    std::mutex control;  // 在微观层面,控制(暂停,恢复,取消)必须是串行的,不能多人同时控制,不然处理就乱了
+    std::mutex run_sche; // 执行调度器在同一时刻也必须只有一个,也就是run函数只能同时运行一次!
+    // 要执行当前任务的机器人,只能在run函数中赋值(run接受引用),1.保证在任务执行过程中,机器人不会被删除 2.暂停,取消函数需要让机器人立刻停止
+    robot* bot = nullptr;
 
     using task_step_callback = std::function<void(json)>;
 
@@ -46,6 +57,9 @@ public:
     // 任务id
     std::string id;
 
+    // 最大执行次数,在定时任务转换的即时任务里面会使用这个参数决定该定时任务是否执行完毕
+    int max_count = 0;
+
     // 任务执行的次数,不论任务执行结果如何,开始执行即算一次,
     int executed_count = 0;
 
@@ -72,6 +86,7 @@ public:
     void cancel();
 
     bool is_over();
+    bool is_empty();
 
     task_step_callback task_will_start_callback = nullptr;
     task_step_callback action_start_callback = nullptr;

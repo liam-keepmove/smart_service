@@ -3,7 +3,6 @@
 #include <cppcodec/base64_rfc4648.hpp>
 #include <cstdlib>
 #include <curl/curl.h>
-#include <fmt/core.h>
 using base64 = cppcodec::base64_rfc4648;
 
 std::string img_to_base64(cv::Mat image) {
