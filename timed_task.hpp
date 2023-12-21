@@ -7,6 +7,7 @@ struct timed_task_set {
 private:
     const std::string cron_file_path;
     const std::string task_file_path = "./timed_task/";
+    const std::string task_recv_topic;
     std::vector<json> timed_task_list;
 
     // 根据timed_task_list更新cron_file和task_file
@@ -14,7 +15,7 @@ private:
 
 public:
     // 将cron_expr存在且对应task_file也存在的item组织成timed_task_list
-    timed_task_set(const std::string& cron_file_path);
+    timed_task_set(const std::string& cron_file_path, const std::string& task_recv_topic);
 
     // 如果任务id不同,将task直接添加到timed_task_list中,如果任务id相同,则更新task
     void add_timed_task(json task);

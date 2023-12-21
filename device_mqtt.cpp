@@ -1,22 +1,23 @@
 #include "device_mqtt.hpp"
+#include "config.hpp"
 #include "misc.hpp"
 #include <atomic>
+#include <chrono>
 #include <spdlog/spdlog.h>
 #include <thread>
+using namespace std::chrono_literals;
 
-static const char* robot_ctrl_move_topic = "/Robot/CtrlMove/500d28757093ca040eb09711";
-static const char* robot_ctrl_other_topic = "/Robot/CtrlOther/500d28757093ca040eb09711";
-static const char* pad_ctrl_topic = "/Pad/Ctrl/500d28757093ca040eb09711";
-static const char* pantilt_ctrl_topic = "/PanTilt/Ctrl/500d28757093ca040eb09711";
-static const char* robot_position_topic = "/Robot/Position/500d28757093ca040eb09711";
-static const char* robot_heart_topic = "/Robot/Heart/500d28757093ca040eb09711";
-static const char* robot_battery_topic = "/Robot/Battery/500d28757093ca040eb09711";
-
-extern const char* broker_ip;
-extern const int broker_port;
-extern const char* broker_username; // mosquitto推荐空账号密码设置为nullptr
-extern const char* broker_password; // mosquitto推荐空账号密码设置为nullptr
+extern config_item global_config;
 extern mosquitto* mosq;
+
+static void mqtt_pub(const std::string& topic, const std::string& payload) {
+    spdlog::info("send to {},payload:{}", topic, payload);
+    int rc = mosquitto_publish(mosq, nullptr, topic.c_str(), payload.size(), payload.c_str(), 2, false);
+    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
+        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
+        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
+    }
+}
 
 namespace robot_device {
 
@@ -47,22 +48,29 @@ json camera_mqtt::shot() {
     return result;
 }
 
-action_body_mqtt::action_body_mqtt() {
+action_body_mqtt::action_body_mqtt(const std::string& id) {
     auto heart_handler = [this]() {
         while (!heart_thread_exit) {
-            std::this_thread::sleep_for(std::chrono::seconds(3));
+            std::this_thread::sleep_for(2s);
             if (!send_heart) {
                 continue;
             }
             std::string payload = fmt::format("{{\"ts\": {} }}", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-            spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_heart_topic, payload);
-            int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-            if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-                spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-                spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-            }
+            mqtt_pub(robot_ctrl_move_topic, payload);
         }
     };
+    robot_id = id;
+    robot_heart_topic += robot_id;
+    robot_position_topic += robot_id;
+    robot_battery_topic += robot_id;
+    robot_ctrl_move_topic += robot_id;
+    robot_ctrl_other_topic += robot_id;
+    robot_motor_topic += robot_id;
+    robot_version_topic += robot_id;
+    robot_sensors_topic += robot_id;
+    robot_led_topic += robot_id;
+    robot_warning_topic += robot_id;
+
     std::thread(heart_handler).detach();
 }
 
@@ -75,13 +83,8 @@ json action_body_mqtt::stop_move(const json& args) {
     json command = args;
     command["action"] = 0;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = false; // 停止心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -90,13 +93,8 @@ json action_body_mqtt::speed_front_move(const json& args) {
     json command = args;
     command["action"] = 1;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = true; // 开始心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -105,13 +103,8 @@ json action_body_mqtt::speed_back_move(const json& args) {
     json command = args;
     command["action"] = 2;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = true; // 开始心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -121,8 +114,7 @@ json action_body_mqtt::location_speed_move(const json& args) {
     json command = args;
     command["action"] = 3;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
-    mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
+    mqtt_pub(robot_ctrl_move_topic, payload);
     int current_location = 0;
     const int target_location = command["arg"]["position"].template get<int>();
     auto subscribe_callback = [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
@@ -136,13 +128,13 @@ json action_body_mqtt::location_speed_move(const json& args) {
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
-            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": {}}}", current_location, "yes"));
+            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": true}}", current_location));
         }
         if (status == RUNING) {
             if (std::abs(current_location - target_location) > 20) {
                 // 距离误差仍在20mm外,继续等待
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                mosquitto_subscribe_callback(subscribe_callback, &current_location, robot_position_topic, 0, broker_ip, broker_port, "get_position", 10, true, broker_username, broker_password, nullptr, nullptr);
+                mosquitto_subscribe_callback(subscribe_callback, &current_location, robot_position_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_position", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr);
             } else {
                 // 在20mm误差之内,意味着到达位置了,正常返回.
                 result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
@@ -162,13 +154,9 @@ json action_body_mqtt::to_charge(const json& args) {
     json command = args;
     command["action"] = 4;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = false; // 停止心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
+
     std::atomic_bool is_battery_full = false;
     auto subscribe_callback = [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
         auto& is_battery_full = *(std::atomic_bool*)obj;
@@ -193,15 +181,15 @@ json action_body_mqtt::to_charge(const json& args) {
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
-            result = json::parse(fmt::format("{{\"emergency_stop\": {}}}", "yes"));
+            result = json::parse(fmt::format("{{\"emergency_stop\": true}}"));
         }
         if (status == RUNING) {
             if (is_battery_full) {
                 result = "";
                 break;
             } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                mosquitto_subscribe_callback(subscribe_callback, &is_battery_full, robot_battery_topic, 0, broker_ip, broker_port, "get_battery", 10, true, broker_username, broker_password, nullptr, nullptr);
+                std::this_thread::sleep_for(10s); // 充电检查频率为10s
+                mosquitto_subscribe_callback(subscribe_callback, &is_battery_full, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr);
             }
         } else if (status == STOPPED) {
             break;
@@ -216,13 +204,8 @@ json action_body_mqtt::motor_reset(const json& args) {
     json command = args;
     command["action"] = 5;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = false; // 停止心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -231,13 +214,9 @@ json action_body_mqtt::restart(const json& args) {
     json command = args;
     command["action"] = 6;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = false; // 停止心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
+    std::this_thread::sleep_for(10s); // 机器人重启,等待10s
     return "";
 }
 
@@ -246,12 +225,7 @@ json action_body_mqtt::set_current_location(const json& args) {
     json command = args;
     command["action"] = 7;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -260,12 +234,7 @@ json action_body_mqtt::set_ultrasonic_switch(const json& args) {
     json command = args;
     command["action"] = 8;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -274,13 +243,8 @@ json action_body_mqtt::poweroff(const json& args) {
     json command = args;
     command["action"] = 9;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_move_topic, payload);
     send_heart = false; // 停止心跳包
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_move_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_move_topic, payload);
     return "";
 }
 
@@ -289,12 +253,7 @@ json action_body_mqtt::set_front_light(const json& args) {
     json command = args;
     command["action"] = 1;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_other_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_other_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(robot_ctrl_other_topic, payload);
     return "";
 }
 
@@ -303,8 +262,7 @@ json action_body_mqtt::set_back_light(const json& args) {
     json command = args;
     command["action"] = 2;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_other_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_other_topic, payload.size(), payload.c_str(), 2, false);
+    mqtt_pub(robot_ctrl_other_topic, payload);
     return "";
 }
 
@@ -313,28 +271,7 @@ json action_body_mqtt::set_volume(const json& args) {
     json command = args;
     command["action"] = 3;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, robot_ctrl_other_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, robot_ctrl_other_topic, payload.size(), payload.c_str(), 2, false);
-    return "";
-}
-
-//{"action":1,"arg":45}
-json action_body_mqtt::set_left_servo(const json& args) {
-    json command = args;
-    command["action"] = 1;
-    std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, pad_ctrl_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, pad_ctrl_topic, payload.size(), payload.c_str(), 2, false);
-    return "";
-}
-
-//{"action":2,"arg":45}
-json action_body_mqtt::set_right_servo(const json& args) {
-    json command = args;
-    command["action"] = 2;
-    std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, pad_ctrl_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, pad_ctrl_topic, payload.size(), payload.c_str(), 2, false);
+    mqtt_pub(robot_ctrl_other_topic, payload);
     return "";
 }
 
@@ -343,7 +280,7 @@ void action_body_mqtt::stop() {
         stop_move(json::parse("{\"arg\": null}"));
         request = REQ_STOP;
         while (status != STOPPED) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(100ms);
             request = REQ_STOP;
         }
     }
@@ -355,17 +292,46 @@ json action_body_mqtt::get_status() {
     return result;
 }
 
+ptz_mqtt::ptz_mqtt(const std::string& id) {
+    ptz_id = id;
+    pantilt_ctrl_topic += ptz_id;
+    pantilt_status_topic += ptz_id;
+    pantilt_version_topic += ptz_id;
+}
+
 //{"action":1,"arg":{"yaw": 180,"pitch": 180,"roll": 180}}
 json ptz_mqtt::set_xyz(const json& args) {
     json command = args;
     command["action"] = 1;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, pantilt_ctrl_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, pantilt_ctrl_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(pantilt_ctrl_topic, payload);
+    std::this_thread::sleep_for(1s); // 等待云台转动到位
+    return "";
+}
+
+json ptz_mqtt::set_lamp(const json& args) {
+    json command = args;
+    command["action"] = 2;
+    std::string payload = command.dump();
+    mqtt_pub(pantilt_ctrl_topic, payload);
+    return "";
+}
+
+json ptz_mqtt::restart(const json& args) {
+    json command = args;
+    command["action"] = 3;
+    std::string payload = command.dump();
+    mqtt_pub(pantilt_ctrl_topic, payload);
+    std::this_thread::sleep_for(5s);
+    return "";
+}
+
+json ptz_mqtt::adjust(const json& args) {
+    json command = args;
+    command["action"] = 4;
+    std::string payload = command.dump();
+    mqtt_pub(pantilt_ctrl_topic, payload);
+    std::this_thread::sleep_for(5s);
     return "";
 }
 
@@ -375,23 +341,46 @@ json ptz_mqtt::get_status() {
     return result;
 }
 
-//{"action":3,"arg":0}  这里只是左灯
-json lamp_mqtt::set_light(const json& args) {
+pad_mqtt::pad_mqtt(const std::string& id) {
+    pad_id = id;
+    pad_ctrl_topic += pad_id;
+    pad_status_topic += pad_id;
+}
+
+//{"action":1,"arg":45}
+json pad_mqtt::set_left_servo(const json& args) {
+    json command = args;
+    command["action"] = 1;
+    std::string payload = command.dump();
+    mqtt_pub(pad_ctrl_topic, payload);
+    return "";
+}
+
+//{"action":2,"arg":45}
+json pad_mqtt::set_right_servo(const json& args) {
+    json command = args;
+    command["action"] = 2;
+    std::string payload = command.dump();
+    mqtt_pub(pad_ctrl_topic, payload);
+    return "";
+}
+
+//{"action":3,"arg":45}
+json pad_mqtt::set_left_lamp(const json& args) {
     json command = args;
     command["action"] = 3;
     std::string payload = command.dump();
-    spdlog::info("{} send to {},payload:{}", __PRETTY_FUNCTION__, pad_ctrl_topic, payload);
-    int rc = mosquitto_publish(mosq, nullptr, pad_ctrl_topic, payload.size(), payload.c_str(), 2, false);
-    if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
-        spdlog::info("Failed to publish message:{} ", mosquitto_strerror(rc));
-        spdlog::info("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
-    }
+    mqtt_pub(pad_ctrl_topic, payload);
     return "";
-};
-
-json lamp_mqtt::get_status() {
-    json result;
-    result["__PRETTY_FUNCTION__"] = __PRETTY_FUNCTION__;
-    return result;
 }
+
+//{"action":4,"arg":45}
+json pad_mqtt::set_right_lamp(const json& args) {
+    json command = args;
+    command["action"] = 4;
+    std::string payload = command.dump();
+    mqtt_pub(pad_ctrl_topic, payload);
+    return "";
+}
+
 }; // namespace robot_device

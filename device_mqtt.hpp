@@ -25,14 +25,26 @@ public:
     };
 
 private:
+    std::string robot_id;
+    std::string robot_heart_topic = "/Robot/Heart/";
+    std::string robot_motor_topic = "/Robot/Motor/";
+    std::string robot_position_topic = "/Robot/Position/";
+    std::string robot_version_topic = "/Robot/Version/";
+    std::string robot_sensors_topic = "/Robot/Sensors/";
+    std::string robot_led_topic = "/Robot/Led/";
+    std::string robot_battery_topic = "/Robot/Battery/";
+    std::string robot_warning_topic = "/Robot/Warning/";
+    std::string robot_ctrl_move_topic = "/Robot/CtrlMove/";
+    std::string robot_ctrl_other_topic = "/Robot/CtrlOther/";
+
     std::atomic_int request = STOPPED;
     std::atomic_int status = STOPPED;
     std::atomic_bool heart_thread_exit = false;
     std::atomic_bool send_heart = false; // 默认不发送心跳包
-    void heart_handler();
 
 public:
-    action_body_mqtt();
+    action_body_mqtt(const std::string& id);
+
     ~action_body_mqtt();
 
     json stop_move(const json& args) override;
@@ -71,12 +83,6 @@ public:
     // 音量调节
     json set_volume(const json& args) override;
 
-    // 左舵机控制
-    json set_left_servo(const json& args) override;
-
-    // 右舵机控制
-    json set_right_servo(const json& args) override;
-
     void stop() override;
 
 private:
@@ -84,19 +90,47 @@ private:
 };
 
 class ptz_mqtt : public ptz {
+private:
+    std::string ptz_id;
+    std::string pantilt_ctrl_topic = "/PanTilt/Ctrl/";
+    std::string pantilt_status_topic = "/PanTilt/BasicState/";
+    std::string pantilt_version_topic = "/PanTilt/Version/";
+
 public:
+    ptz_mqtt(const std::string& id);
+
     json set_xyz(const json& args) override;
+
+    json set_lamp(const json& args) override;
+
+    json restart(const json& args) override;
+
+    json adjust(const json& args) override;
 
 private:
     json get_status() override;
 };
 
-class lamp_mqtt : public lamp {
-public:
-    json set_light(const json& args) override;
-
+class pad_mqtt : public pad {
 private:
-    json get_status() override;
+    std::string pad_id;
+    std::string pad_ctrl_topic = "/Pad/Ctrl/";
+    std::string pad_status_topic = "/Pad/Status/";
+
+public:
+    pad_mqtt(const std::string& id);
+
+    // 左舵机控制
+    json set_left_servo(const json& args) override;
+
+    // 右舵机控制
+    json set_right_servo(const json& args) override;
+
+    // 设置左补光灯
+    json set_left_lamp(const json& args) override;
+
+    // 设置右补光灯
+    json set_right_lamp(const json& args) override;
 };
 
 }; // namespace robot_device

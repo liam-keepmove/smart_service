@@ -1,0 +1,11 @@
+broker_ip: 127.0.0.1
+broker_port: 1883
+broker_username: admin
+broker_password: abcd1234
+broker_keep_alive: 10
+mqtt_client_id: mosquitto_hj
+robot_id: 2885688118
+modules:
+- module_name: ptz
+  module_id: 1467438888
+

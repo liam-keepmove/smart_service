@@ -1,4 +1,5 @@
 #include "ThreadSafeQueue.hpp"
+#include "config.hpp"
 #include "device_mqtt.hpp"
 #include "json.hpp"
 #include "misc.hpp"
@@ -11,24 +12,28 @@
 #include <signal.h>
 #include <spdlog/spdlog.h>
 #include <thread>
+#include <yaml-cpp/yaml.h>
 
 using namespace std::chrono_literals;
 
-std::array<const char*, 3> smart_ctrl_topic_list = {"/SmartSer/Pad/Ctrl/500d28757093ca040eb09711", "/SmartSer/Robot/CtrlMove/500d28757093ca040eb09711", "/SmartSer/Robot/CtrlOther/500d28757093ca040eb09711"}; // 机器人实时控制 订阅
-const char* broker_ip = "127.0.0.1";
-extern const int broker_port = 1883;
-const char* broker_username = "admin";    // mosquitto推荐空账号密码设置为nullptr
-const char* broker_password = "abcd1234"; // mosquitto推荐空账号密码设置为nullptr
-const char* mqtt_client_id = "mosquitto_hj";
-extern const int broker_keep_alive = 10;                                                 // mqtt心跳时间,单位秒,注意,mqtt的服务端主动断开客户端的时间是1.5倍的心跳时间
-const char* task_recv_topic = "/SmartSer/Robot/Task/500d28757093ca040eb09711";           // 任务控制 订阅
-const char* task_feedback_topic = "/SmartSer/Robot/TaskStatus/500d28757093ca040eb09711"; // 任务状态 发布
-const char* task_debug_topic = "/SmartSer/Debug";
+config_item global_config("./config.yml");
 mosquitto* mosq = nullptr; // 全局变量实现单例模式
 
 class smart_service {
 public:
-    timed_task_set timed_set{"/etc/cron.d/timed_task_robot"}; // crontab的定时任务文件
+    // 以下配置项由全局配置项合成
+    std::string robot_id = global_config.robot_id;
+    std::string task_recv_topic = "/SmartSer/Robot/Task/" + robot_id;
+    std::string task_feedback_topic = "/SmartSer/Robot/TaskStatus/" + robot_id;
+    std::string task_debug_topic = "/SmartSer/Debug";
+    std::vector<std::string> forward_topics = {
+        "/SmartSer/Robot/Heart/" + robot_id,
+        "/SmartSer/Robot/CtrlMove/" + robot_id,
+        "/SmartSer/Robot/CtrlOther/" + robot_id,
+        "/SmartSer/PanTilt/Ctrl/" + robot_id,
+        "/SmartSer/Pad/Ctrl/" + robot_id,
+    };
+    timed_task_set timed_set{"/etc/cron.d/timed_task_robot", task_recv_topic}; // crontab的定时任务文件
     task current_task;
     robot bot;
     ThreadSafeQueue<mosquitto_message*> mqtt_msg_queue; // mqtt消息队列
@@ -46,7 +51,7 @@ public:
         int rc = mosquitto_lib_init();
         if (rc != MOSQ_ERR_SUCCESS)
             THROW_RUNTIME_ERROR(std::string("Failed to init-mosquitto.") + mosquitto_strerror(rc));
-        mosq = mosquitto_new(mqtt_client_id, true, this);
+        mosq = mosquitto_new(global_config.mqtt_client_id.c_str(), true, this);
         if (mosq == nullptr)
             THROW_RUNTIME_ERROR(std::string("Failed to create mosquitto object."));
 
@@ -57,21 +62,21 @@ public:
                 THROW_RUNTIME_ERROR(std::string("Failed to connect mosquitto because the reason code is not 0."));
             }
             spdlog::info("mqtt connection is successful");
-
-            for (const auto& topic : smart_ctrl_topic_list) {
+            auto object = (smart_service*)obj;
+            for (const auto& topic : object->forward_topics) {
                 spdlog::info("Prepare to subscribe {} topics.", topic);
-                int rc = mosquitto_subscribe(mosq, nullptr, topic, 2);
+                int rc = mosquitto_subscribe(mosq, nullptr, topic.c_str(), 2);
                 if (rc != MOSQ_ERR_SUCCESS) {
                     THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
                 }
             }
-            spdlog::info("Prepare to subscribe {} topics.", task_recv_topic);
-            int rc = mosquitto_subscribe(mosq, nullptr, task_recv_topic, 2);
+            spdlog::info("Prepare to subscribe {} topics.", object->task_recv_topic);
+            int rc = mosquitto_subscribe(mosq, nullptr, object->task_recv_topic.c_str(), 2);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
-            spdlog::info("Prepare to subscribe {} topics.", task_debug_topic);
-            rc = mosquitto_subscribe(mosq, nullptr, task_debug_topic, 2);
+            spdlog::info("Prepare to subscribe {} topics.", object->task_debug_topic);
+            rc = mosquitto_subscribe(mosq, nullptr, object->task_debug_topic.c_str(), 2);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
@@ -126,12 +131,12 @@ public:
         });
 #endif
 
-        rc = mosquitto_username_pw_set(mosq, broker_username, broker_password);
+        rc = mosquitto_username_pw_set(mosq, global_config.broker_username.c_str(), global_config.broker_password.c_str());
         if (rc != MOSQ_ERR_SUCCESS)
             THROW_RUNTIME_ERROR(std::string("Failed to set username and password.") + mosquitto_strerror(rc));
 
         spdlog::info("connecting...");
-        rc = mosquitto_connect(mosq, broker_ip, broker_port, broker_keep_alive);
+        rc = mosquitto_connect(mosq, global_config.broker_ip.c_str(), global_config.broker_port, global_config.broker_keep_alive);
         while (rc != MOSQ_ERR_SUCCESS) {
             spdlog::error("Failed to connect mosquitto broker: {}", mosquitto_strerror(rc));
             spdlog::error("reconnect after 5 seconds");
@@ -160,7 +165,7 @@ public:
         static auto callback = [this](json task_feedback) {
             task_feedback["type"] = 8;
             std::string feedback_str = task_feedback.dump();
-            int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic, feedback_str.size(), feedback_str.c_str(), 2, false);
+            int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), feedback_str.size(), feedback_str.c_str(), 2, false);
             spdlog::info("send to topic \"{}\":{}", task_feedback_topic, feedback_str);
             if (rc != MOSQ_ERR_SUCCESS) {
                 spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
@@ -221,7 +226,7 @@ public:
             result["remark"] = "success of add timed_task";
             result["tag"] = task_json.at("tag");
             result_str = result.dump(4);
-            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic, result_str.size(), result_str.c_str(), 2, false);
+            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), result_str.size(), result_str.c_str(), 2, false);
             spdlog::info("send to topic \"{}\":{}", task_feedback_topic, result_str);
             if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
                 spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
@@ -236,7 +241,7 @@ public:
             result["remark"] = "success of delete timed_task";
             result["tag"] = task_json.at("tag");
             result_str = result.dump(4);
-            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic, result_str.size(), result_str.c_str(), 2, false);
+            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), result_str.size(), result_str.c_str(), 2, false);
             spdlog::info("send to topic \"{}\":{}", task_feedback_topic, result_str);
             if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
                 spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
@@ -254,7 +259,7 @@ public:
                 result["remark"] = "A task is currently executing, but the new task has a lower priority than the current task and cannot be set";
                 result["tag"] = task_json.at("tag");
                 result_str = result.dump(4);
-                int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic, result_str.size(), result_str.c_str(), 2, false);
+                int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), result_str.size(), result_str.c_str(), 2, false);
                 spdlog::info("send to topic \"{}\":{}", task_feedback_topic, result_str);
                 if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
                     spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
@@ -275,7 +280,7 @@ public:
             result["type"] = 10;
             result["remark"] = "error message type";
             result_str = result.dump(4);
-            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic, result_str.size(), result_str.c_str(), 2, false);
+            rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), result_str.size(), result_str.c_str(), 2, false);
             spdlog::info("send to topic \"{}\":{}", task_feedback_topic, result_str);
             if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
                 spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
@@ -290,13 +295,13 @@ public:
         while (true) {
             mosquitto_message* msg = nullptr;
             mqtt_msg_queue.pop(msg);
-            if (std::find_if(smart_ctrl_topic_list.begin(), smart_ctrl_topic_list.end(), [msg](const char* topic) { return std::strcmp(msg->topic, topic) == 0; }) != smart_ctrl_topic_list.end()) {
+            if (std::find_if(forward_topics.begin(), forward_topics.end(), [msg](const std::string& topic) { return std::strcmp(msg->topic, topic.c_str()) == 0; }) != forward_topics.end()) {
                 // 实时控制
                 real_time_ctrl_handler(msg);
-            } else if (strcmp(msg->topic, task_recv_topic) == 0) {
+            } else if (strcmp(msg->topic, task_recv_topic.c_str()) == 0) {
                 // 任务控制
                 task_handler((char*)(msg->payload));
-            } else if (strcmp(msg->topic, task_debug_topic) == 0) {
+            } else if (strcmp(msg->topic, task_debug_topic.c_str()) == 0) {
                 if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) { // debug退出方式
                     spdlog::info("exit");
                     break;
@@ -313,9 +318,21 @@ public:
 
 int main() {
     try {
-        robot mapad;
-        mapad.add_device("robot_body", std::make_unique<robot_device::action_body_mqtt>());
-        smart_service smart_ser{std::move(mapad)};
+        robot bot;
+        bot.add_device("robot", std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
+        spdlog::info("add_device:action_body ,id:{}", global_config.robot_id);
+        for (const auto& module : global_config.modules) {
+            if (module.module_name == "ptz") {
+                bot.add_device(module.module_name, std::make_unique<robot_device::ptz_mqtt>(module.module_id));
+                spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
+            } else if (module.module_name == "pad") {
+                bot.add_device(module.module_name, std::make_unique<robot_device::pad_mqtt>(module.module_id));
+                spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
+            } else {
+                spdlog::warn("unknow module");
+            }
+        }
+        smart_service smart_ser{std::move(bot)};
         smart_ser.start_mqtt();
         smart_ser.mqtt_msg_handler();
     } catch (const json::parse_error& ex) {

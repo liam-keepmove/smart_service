@@ -85,12 +85,6 @@ public:
     // 音量调节
     virtual json set_volume(const json& args) = 0;
 
-    // 左舵机控制
-    virtual json set_left_servo(const json& args) = 0;
-
-    // 右舵机控制
-    virtual json set_right_servo(const json& args) = 0;
-
     std::function<json(const json&)> get_action(std::string action_code) {
         return action_map.at(action_code);
     }
@@ -110,8 +104,6 @@ private:
         {"10", std::bind(&action_body::set_front_light, this, std::placeholders::_1)},
         {"11", std::bind(&action_body::set_back_light, this, std::placeholders::_1)},
         {"12", std::bind(&action_body::set_volume, this, std::placeholders::_1)},
-        {"13", std::bind(&action_body::set_left_servo, this, std::placeholders::_1)},
-        {"14", std::bind(&action_body::set_right_servo, this, std::placeholders::_1)},
     };
     virtual json get_status() = 0;
 };
@@ -121,6 +113,15 @@ public:
     // 设置云台xyz
     virtual json set_xyz(const json& args) = 0;
 
+    // 设置补光灯
+    virtual json set_lamp(const json& args) = 0;
+
+    // 重启
+    virtual json restart(const json& args) = 0;
+
+    // 校准
+    virtual json adjust(const json& args) = 0;
+
     std::function<json(const json&)> get_action(std::string action_code) {
         return action_map.at(action_code);
     }
@@ -128,15 +129,27 @@ public:
 private:
     std::map<std::string, std::function<json(const json&)>> action_map{
         {"1", std::bind(&ptz::set_xyz, this, std::placeholders::_1)},
+        {"2", std::bind(&ptz::set_lamp, this, std::placeholders::_1)},
+        {"3", std::bind(&ptz::restart, this, std::placeholders::_1)},
+        {"4", std::bind(&ptz::adjust, this, std::placeholders::_1)},
     };
 
     virtual json get_status() = 0;
 };
 
-class lamp : public device {
+class pad : public device {
 public:
-    // 设置灯亮度
-    virtual json set_light(const json& args) = 0;
+    // 左舵机控制
+    virtual json set_left_servo(const json& args) = 0;
+
+    // 右舵机控制
+    virtual json set_right_servo(const json& args) = 0;
+
+    // 设置左补光灯
+    virtual json set_left_lamp(const json& args) = 0;
+
+    // 设置右补光灯
+    virtual json set_right_lamp(const json& args) = 0;
 
     std::function<json(const json&)> get_action(std::string action_code) {
         return action_map.at(action_code);
@@ -144,10 +157,11 @@ public:
 
 private:
     std::map<std::string, std::function<json(const json&)>> action_map{
-        {"1", std::bind(&lamp::set_light, this, std::placeholders::_1)},
+        {"1", std::bind(&pad::set_left_servo, this, std::placeholders::_1)},
+        {"2", std::bind(&pad::set_right_servo, this, std::placeholders::_1)},
+        {"3", std::bind(&pad::set_left_lamp, this, std::placeholders::_1)},
+        {"4", std::bind(&pad::set_right_lamp, this, std::placeholders::_1)},
     };
-
-    virtual json get_status() = 0;
 };
 
 } // namespace robot_device

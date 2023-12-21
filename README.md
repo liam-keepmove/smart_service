@@ -10,6 +10,7 @@ NOTE: 一些服务依赖库已经编译好(linux-arm64)并放置在third目录�
 |spdlog|1.12.0|compile|
 |cppcodec|0.2|compile|
 |mosquitto|2.0.15|compile|
+|yaml-cpp|0.8|compile|
 
 ### 服务依赖程序
 1. emqx broker

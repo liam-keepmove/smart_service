@@ -1,4 +1,5 @@
 #include "timed_task.hpp"
+#include "config.hpp"
 #include "json.hpp"
 #include "misc.hpp"
 #include <filesystem>
@@ -7,13 +8,7 @@
 #include <regex>
 #include <spdlog/spdlog.h>
 using json = nlohmann::ordered_json;
-
-// 定时让mqttx发任务消息的broker信息
-extern const char* broker_ip;
-extern const int broker_port;
-extern const char* broker_username; // mosquitto推荐空账号密码设置为nullptr
-extern const char* broker_password; // mosquitto推荐空账号密码设置为nullptr
-extern const char* task_recv_topic; // 任务接收topic
+extern config_item global_config;
 
 // 根据timed_task_list更新cron_file和task_file
 void timed_task_set::update_file() {
@@ -32,7 +27,7 @@ void timed_task_set::update_file() {
         std::string task_id = task.at("id").get<std::string>();
         std::string cron_expr = task.at("cron").get<std::string>();
         std::string command = fmt::format("cd ${{WORK_DIR}} && cat ./timed_task/{}.json | ./mqttx pub -V 3.1.1 --username '{}' --password '{}' -h '{}' -p {} -t '{}' -q 2 --stdin",
-                                          task.at("id").template get<std::string>(), broker_username, broker_password, broker_ip, broker_port, task_recv_topic);
+                                          task.at("id").template get<std::string>(), global_config.broker_username, global_config.broker_password, global_config.broker_ip, global_config.broker_port, task_recv_topic);
         cron_file << cron_expr << " root " << command << std::endl;
         std::ofstream task_file(task_file_path + task_id + ".json"); // 创建./timed_task/xxx.json
         if (!task_file.is_open()) {
@@ -45,8 +40,8 @@ void timed_task_set::update_file() {
 }
 
 // 将cron_expr存在且对应task_file也存在的item添加进timed_task_list
-timed_task_set::timed_task_set(const std::string& cron_file_path)
-    : cron_file_path(cron_file_path) {
+timed_task_set::timed_task_set(const std::string& cron_file_path, const std::string& task_recv_topic)
+    : cron_file_path(cron_file_path), task_recv_topic(task_recv_topic) {
     if (!std::filesystem::exists(cron_file_path)) {
         // 若此文件不存在,新建一个空文件
         std::ofstream ofs(cron_file_path);
