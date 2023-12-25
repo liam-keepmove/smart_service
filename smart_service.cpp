@@ -301,11 +301,11 @@ public:
                 try {
                     task_handler(json::parse((char*)(msg->payload)));
                 } catch (const json::parse_error& ex) {
-                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                    spdlog::info("throw line:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 } catch (const json::out_of_range& ex) {
-                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                    spdlog::info("throw line:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 } catch (const json::type_error& ex) {
-                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                    spdlog::info("throw line:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 }
             } else if (strcmp(msg->topic, task_debug_topic.c_str()) == 0) {
                 if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) { // debug退出方式
