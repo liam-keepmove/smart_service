@@ -6,6 +6,6 @@ broker_keep_alive: 10
 mqtt_client_id: mosquitto_hj
 robot_id: 2885688118
 modules:
-- module_name: ptz
+- module_name: PanTilt
   module_id: 1467438888
 

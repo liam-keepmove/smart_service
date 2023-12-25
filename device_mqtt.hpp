@@ -19,7 +19,8 @@ private:
 
 class action_body_mqtt : public action_body {
 public:
-    enum { RUNING = 0,
+    enum { INIT = -1,
+           RUNNING = 0,
            STOPPED = 1,
            REQ_STOP = 2,
     };
@@ -37,7 +38,7 @@ private:
     std::string robot_ctrl_move_topic = "/Robot/CtrlMove/";
     std::string robot_ctrl_other_topic = "/Robot/CtrlOther/";
 
-    std::atomic_int request = STOPPED;
+    std::atomic_int request = INIT;
     std::atomic_int status = STOPPED;
     std::atomic_bool heart_thread_exit = false;
     std::atomic_bool send_heart = false; // 默认不发送心跳包

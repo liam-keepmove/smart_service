@@ -172,20 +172,19 @@ public:
                 spdlog::error("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
             }
             if (current_task.is_over()) {
-                if (task_feedback["tag"] == "timed_task")
-                    // 任务结束后,定时任务转换来的即时任务如果执行次数足够了,要删除掉,执行次数不够则要更新执行次数
-                    if (current_task.executed_count >= current_task.max_count) {
-                        timed_set.del_timed_task(current_task.id);
-                    } else {
-                        for (const auto& task : timed_set.get_timed_task_list()) {
-                            if (task.at("id") == current_task.id) {
-                                json update_task = task;
-                                update_task.at("executed_count") = current_task.executed_count;
-                                timed_set.add_timed_task(update_task);
-                                break;
-                            }
+                // 任务结束后,定时任务转换来的即时任务如果执行次数足够了,要删除掉,执行次数不够则要更新执行次数
+                for (const auto& timed_task : timed_set.get_timed_task_list()) {
+                    if (timed_task.at("id") == current_task.id) { // 当前任务是一个定时任务转换而来的
+                        if (current_task.executed_count >= current_task.max_count) {
+                            timed_set.del_timed_task(current_task.id);
+                        } else {
+                            json update_task = timed_task;
+                            update_task.at("executed_count") = current_task.executed_count;
+                            timed_set.add_timed_task(update_task);
                         }
+                        break;
                     }
+                }
             }
         };
         current_task.task_will_start_callback = callback;
@@ -211,8 +210,7 @@ public:
     }
 
     // 后端发来的任务相关请求
-    void task_handler(const std::string& task_str) {
-        json task_json = json::parse(task_str);
+    void task_handler(json task_json) {
         spdlog::info("task handler recv:\n{}", task_json.dump(4));
         json result;
         std::string result_str;
@@ -300,7 +298,15 @@ public:
                 real_time_ctrl_handler(msg);
             } else if (strcmp(msg->topic, task_recv_topic.c_str()) == 0) {
                 // 任务控制
-                task_handler((char*)(msg->payload));
+                try {
+                    task_handler(json::parse((char*)(msg->payload)));
+                } catch (const json::parse_error& ex) {
+                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                } catch (const json::out_of_range& ex) {
+                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                } catch (const json::type_error& ex) {
+                    spdlog::info("throw line:{}\n{}", __LINE__, ex.what());
+                }
             } else if (strcmp(msg->topic, task_debug_topic.c_str()) == 0) {
                 if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) { // debug退出方式
                     spdlog::info("exit");
@@ -319,13 +325,13 @@ public:
 int main() {
     try {
         robot bot;
-        bot.add_device("robot", std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
-        spdlog::info("add_device:action_body ,id:{}", global_config.robot_id);
+        bot.add_device("Robot", std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
+        spdlog::info("add_device:Robot ,id:{}", global_config.robot_id);
         for (const auto& module : global_config.modules) {
-            if (module.module_name == "ptz") {
+            if (module.module_name == "PanTilt") {
                 bot.add_device(module.module_name, std::make_unique<robot_device::ptz_mqtt>(module.module_id));
                 spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
-            } else if (module.module_name == "pad") {
+            } else if (module.module_name == "Pad") {
                 bot.add_device(module.module_name, std::make_unique<robot_device::pad_mqtt>(module.module_id));
                 spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
             } else {
@@ -335,8 +341,6 @@ int main() {
         smart_service smart_ser{std::move(bot)};
         smart_ser.start_mqtt();
         smart_ser.mqtt_msg_handler();
-    } catch (const json::parse_error& ex) {
-        spdlog::info("parse error:\n{}", ex.what());
     } catch (const std::bad_alloc& ex) {
         spdlog::info("bad_alloc error:\n{}", ex.what());
     } catch (const std::runtime_error& ex) {

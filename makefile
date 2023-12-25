@@ -11,7 +11,6 @@ RPATH += -Wl,-rpath,'$$ORIGIN'/:'$$ORIGIN'/lib/:'$$ORIGIN'/third/curl-8.4.0/lib/
 
 smart_service.out: smart_service.o task.o timed_task.o robot.o device_mqtt.o image_detect.o
 	g++ ${FLAGS} task.o timed_task.o robot.o device_mqtt.o image_detect.o smart_service.o ${PKG} -o smart_service.out ${RPATH}
-	@sed -i "s\WorkingDirectory=.*\WorkingDirectory=`pwd`\g" $(SYSTEMD_SERVICE_NAME)
 
 smart_service.o: smart_service.cpp ThreadSafeQueue.hpp device_mqtt.hpp device.hpp json.hpp misc.hpp robot.hpp task.hpp timed_task.hpp config.hpp
 	g++ ${FLAGS} -c smart_service.cpp ${PKG}
@@ -35,6 +34,8 @@ image_detect.o: image_detect.cpp image_detect.hpp json.hpp misc.hpp
 	g++ ${FLAGS} -c image_detect.cpp ${PKG}
 
 powerstart:
+	@echo "Change the script parameter \"WorkingDirectory=\" to the current directory"
+	@sed -i "s\WorkingDirectory=.*\WorkingDirectory=`pwd`\g" $(SYSTEMD_SERVICE_NAME)
 	cp $(SYSTEMD_SERVICE_NAME) /etc/systemd/system
 	systemctl enable $(SYSTEMD_SERVICE_NAME)
 	systemctl daemon-reload

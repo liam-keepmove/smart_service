@@ -129,13 +129,41 @@ void task::run(robot& qibot) {
             auto active = action_list.at(i);
             active_no = active.no;
             XX(action_start_callback, generate_feedback(active_no, EXECING, "", "The action will exec", active.tag)); // 任务执行中反馈
-            json result = bot->get_device(active.device_code)->get_action(active.active_code)(active.active_args);
-            if (result.contains("emergency_stop")) { // 是暂停导致的返回,那么此动作在恢复时,还要再执行一次,所以i不自增
+            json result;
+            try {
+                result = bot->get_device(active.device_code)->get_action(active.active_code)(active.active_args);
+                result["remark"] = "Executed successfully";
+                if (result.contains("emergency_stop")) { // 是暂停导致的返回,那么此动作在恢复时,还要再执行一次,所以i不自增
 
-            } else {
-                // 正常返回,执行下一个动作
-                XX(action_result_callback, generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
-                ++i;
+                } else {
+                    // 正常返回,执行下一个动作
+                    XX(action_result_callback, generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                    ++i;
+                }
+            } catch (const std::out_of_range& ex) {
+                spdlog::error("device_code or active_code no found");
+                result["remark"] = "Executed fail, device_code or active_code no found";
+                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
+                break;
+            } catch (const json::parse_error& ex) {
+                spdlog::error("json parse error");
+                result["remark"] = "Executed fail, json parse error";
+                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
+                break;
+            } catch (const json::out_of_range& ex) {
+                spdlog::error("key of json no found");
+                result["remark"] = "Executed fail, key of json no found";
+                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
+                break;
+            } catch (const json::type_error& ex) {
+                spdlog::error("json type parse error");
+                result["remark"] = "Executed fail, json type parse error";
+                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
+                break;
             }
         }
     }

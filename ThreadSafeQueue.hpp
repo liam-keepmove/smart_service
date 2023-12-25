@@ -53,9 +53,10 @@ public:
      * @param {int} milliseconds
      * @return {*}
      */
-    bool popTimeout(T& value, int milliseconds) {
+    template <typename _Rep, typename _Period>
+    bool popTimeout(T& value, const std::chrono::duration<_Rep, _Period>& dur) {
         std::unique_lock<std::mutex> lock(mutex);
-        if (!cond.wait_for(lock, std::chrono::milliseconds(milliseconds),
+        if (!cond.wait_for(lock, dur,
                            [this]() { return !queue.empty(); })) {
             return false;
         }
@@ -91,6 +92,13 @@ public:
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex);
         return queue.size();
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex);
+        while (!queue.empty()) {
+            queue.pop();
+        }
     }
 
 private:

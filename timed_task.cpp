@@ -83,7 +83,6 @@ timed_task_set::timed_task_set(const std::string& cron_file_path, const std::str
 
 void timed_task_set::add_timed_task(json task) {
     task["type"] = 3; // 3表示即时任务,将定时任务转换为即时任务存储起来,后续直接定时给自己下发即时任务来实现定时任务
-    task["tag"] = "timed_task";
     for (auto it = timed_task_list.begin(); it != timed_task_list.end(); ++it) {
         // 如果任务id相同,则更新任务,用新的任务直接替换旧的任务
         if ((*it).at("id") == task.at("id")) {

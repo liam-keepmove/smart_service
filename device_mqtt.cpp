@@ -1,14 +1,22 @@
 #include "device_mqtt.hpp"
+#include "ThreadSafeQueue.hpp"
 #include "config.hpp"
 #include "misc.hpp"
 #include <atomic>
 #include <chrono>
 #include <spdlog/spdlog.h>
 #include <thread>
+using namespace std::literals;
 using namespace std::chrono_literals;
 
 extern config_item global_config;
 extern mosquitto* mosq;
+
+struct mos_obj {
+    ThreadSafeQueue<mosquitto_message*> msg_queue;
+    std::chrono::time_point<std::chrono::steady_clock> last_recv_time; // 上次采样时间
+    std::atomic_bool done = false;
+};
 
 static void mqtt_pub(const std::string& topic, const std::string& payload) {
     spdlog::info("send to {},payload:{}", topic, payload);
@@ -56,7 +64,7 @@ action_body_mqtt::action_body_mqtt(const std::string& id) {
                 continue;
             }
             std::string payload = fmt::format("{{\"ts\": {} }}", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-            mqtt_pub(robot_ctrl_move_topic, payload);
+            mqtt_pub(robot_heart_topic, payload);
         }
     };
     robot_id = id;
@@ -85,7 +93,7 @@ json action_body_mqtt::stop_move(const json& args) {
     std::string payload = command.dump();
     send_heart = false; // 停止心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":1,"arg":0.5}
@@ -95,7 +103,7 @@ json action_body_mqtt::speed_front_move(const json& args) {
     std::string payload = command.dump();
     send_heart = true; // 开始心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":2,"arg":0.5}
@@ -105,42 +113,59 @@ json action_body_mqtt::speed_back_move(const json& args) {
     std::string payload = command.dump();
     send_heart = true; // 开始心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 // 位置模式,到达位置后才返回,结果包含到达的位置 {"action":3,"arg":{"speed":0.5,"position":1500}}
 json action_body_mqtt::location_speed_move(const json& args) {
-    status = RUNING;
+    status = RUNNING;
     json command = args;
     command["action"] = 3;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_move_topic, payload);
+
     int current_location = 0;
-    const int target_location = command["arg"]["position"].template get<int>();
-    auto subscribe_callback = [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
-        int& current_location = *(int*)obj;
-        json result = json::parse((char*)message->payload);
-        result.at("position").get_to(current_location);
-        spdlog::info("current_location:{}", current_location);
-        return 0;
-    };
+    const int target_location = command.at("arg").at("position").template get<int>();
+    mos_obj* object = new mos_obj();
+    std::thread(
+        &mosquitto_subscribe_callback,
+        [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
+            auto object = (mos_obj*)obj;
+            auto elapsed = (std::chrono::duration_cast<std::chrono::seconds>)(std::chrono::steady_clock::now() - object->last_recv_time);
+            if (elapsed > 3s) {
+                auto msg = (mosquitto_message*)malloc(sizeof(mosquitto_message));
+                mosquitto_message_copy(msg, message);
+                object->msg_queue.push(msg);
+                object->last_recv_time = std::chrono::steady_clock::now();
+            }
+            return object->done ? delete object, 1 : 0;
+        },
+        object, robot_position_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
+        .detach();
+
     json result;
+    mosquitto_message* msg;
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
-            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": true}}", current_location));
         }
-        if (status == RUNING) {
-            if (std::abs(current_location - target_location) > 20) {
-                // 距离误差仍在20mm外,继续等待
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                mosquitto_subscribe_callback(subscribe_callback, &current_location, robot_position_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_position", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr);
-            } else {
-                // 在20mm误差之内,意味着到达位置了,正常返回.
-                result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
-                break;
+
+        if (status == RUNNING) {
+            if (object->msg_queue.popTimeout(msg, 1s)) { // 之所以设置超时时间,是为了及时的响应stop请求,不能单纯的消息驱动(太快没效率,太慢不能及时响应stop)
+                json msg_json = json::parse((char*)msg->payload);
+                mosquitto_message_free(&msg);
+
+                current_location = msg_json.at("position").get<int>();
+                spdlog::info("current_location:{},target_location:{}", current_location, target_location);
+                // 在20mm误差之内,意味着到达位置了,否则就是未到达位置.
+                if (std::abs(current_location - target_location) <= 20) {
+                    object->done = true;
+                    result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
+                    break;
+                }
             }
         } else if (status == STOPPED) {
+            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": true}}", current_location));
             break;
         }
     }
@@ -150,48 +175,62 @@ json action_body_mqtt::location_speed_move(const json& args) {
 
 //{"action":4,"arg":null}
 json action_body_mqtt::to_charge(const json& args) {
-    status = RUNING;
+    status = RUNNING;
     json command = args;
     command["action"] = 4;
     std::string payload = command.dump();
     send_heart = false; // 停止心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
 
-    std::atomic_bool is_battery_full = false;
-    auto subscribe_callback = [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
-        auto& is_battery_full = *(std::atomic_bool*)obj;
-        int all_battery_full = 1;
-        json result = json::parse((char*)message->payload);
-        json battery_info_array = result.at("BatteryPck");
-        for (auto& battery_info : battery_info_array) {
-            if (battery_info.at("NomCap").template get<double>() == battery_info.at("RemCap").template get<double>()) {
-                all_battery_full &= 1;
-            } else {
-                all_battery_full &= 0;
+    mos_obj* object = new mos_obj();
+    std::thread(
+        &mosquitto_subscribe_callback,
+        [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
+            auto object = (mos_obj*)obj;
+            auto elapsed = (std::chrono::duration_cast<std::chrono::seconds>)(std::chrono::steady_clock::now() - object->last_recv_time);
+            if (elapsed > 10s) {
+                auto msg = (mosquitto_message*)malloc(sizeof(mosquitto_message));
+                mosquitto_message_copy(msg, message);
+                object->msg_queue.push(msg);
+                object->last_recv_time = std::chrono::steady_clock::now();
             }
-        }
-        if (all_battery_full == 1) {
-            is_battery_full = true;
-        } else {
-            is_battery_full = false;
-        }
-        return 0;
-    };
+            return object->done ? delete object, 1 : 0;
+        },
+        object, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
+        .detach();
+
     json result;
+    mosquitto_message* msg;
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
-            result = json::parse(fmt::format("{{\"emergency_stop\": true}}"));
         }
-        if (status == RUNING) {
-            if (is_battery_full) {
-                result = "";
-                break;
-            } else {
-                std::this_thread::sleep_for(10s); // 充电检查频率为10s
-                mosquitto_subscribe_callback(subscribe_callback, &is_battery_full, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr);
+
+        if (status == RUNNING) {
+            if (object->msg_queue.popTimeout(msg, 1s)) {
+                json msg_json = json::parse((char*)msg->payload);
+                mosquitto_message_free(&msg);
+
+                int all_battery_full = 1;
+                json battery_info_array = msg_json.at("BatteryPack");
+                for (const auto& battery_info : battery_info_array) {
+                    double nom_cap = battery_info.at("NomCap").template get<double>(); // 标定电池容量
+                    double rem_cap = battery_info.at("RemCap").template get<double>(); // 剩余电池容量
+                    spdlog::info("NomCap: {}, RemCap: {}", nom_cap, rem_cap);
+                    if (std::abs(nom_cap - rem_cap) <= 0.001) {
+                        all_battery_full &= 1;
+                    } else {
+                        all_battery_full &= 0;
+                    }
+                }
+                if (all_battery_full == 1) {
+                    object->done = true;
+                    result = json::parse(fmt::format("{{\"battery_full\": true}}"));
+                    break;
+                }
             }
         } else if (status == STOPPED) {
+            result = json::parse(fmt::format("{{\"emergency_stop\": true}}"));
             break;
         }
     }
@@ -206,7 +245,7 @@ json action_body_mqtt::motor_reset(const json& args) {
     std::string payload = command.dump();
     send_heart = false; // 停止心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":6,"arg":null}
@@ -217,7 +256,7 @@ json action_body_mqtt::restart(const json& args) {
     send_heart = false; // 停止心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
     std::this_thread::sleep_for(10s); // 机器人重启,等待10s
-    return "";
+    return json();
 }
 
 //{"action":7,"arg":1500}
@@ -226,7 +265,7 @@ json action_body_mqtt::set_current_location(const json& args) {
     command["action"] = 7;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":8,"arg":0}
@@ -235,7 +274,7 @@ json action_body_mqtt::set_ultrasonic_switch(const json& args) {
     command["action"] = 8;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":9,"arg":null}
@@ -245,7 +284,7 @@ json action_body_mqtt::poweroff(const json& args) {
     std::string payload = command.dump();
     send_heart = false; // 停止心跳包
     mqtt_pub(robot_ctrl_move_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":1,"arg":50}
@@ -254,7 +293,7 @@ json action_body_mqtt::set_front_light(const json& args) {
     command["action"] = 1;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_other_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":2,"arg":50}
@@ -263,7 +302,7 @@ json action_body_mqtt::set_back_light(const json& args) {
     command["action"] = 2;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_other_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":3,"arg":10}
@@ -272,18 +311,19 @@ json action_body_mqtt::set_volume(const json& args) {
     command["action"] = 3;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_other_topic, payload);
-    return "";
+    return json();
 }
 
 void action_body_mqtt::stop() {
-    if (status != STOPPED) {
+    if (status == RUNNING) {
         stop_move(json::parse("{\"arg\": null}"));
         request = REQ_STOP;
-        while (status != STOPPED) {
-            std::this_thread::sleep_for(100ms);
+        while (status == RUNNING) {
+            std::this_thread::sleep_for(1s);
             request = REQ_STOP;
         }
     }
+    request = INIT;
     return;
 }
 
@@ -305,8 +345,8 @@ json ptz_mqtt::set_xyz(const json& args) {
     command["action"] = 1;
     std::string payload = command.dump();
     mqtt_pub(pantilt_ctrl_topic, payload);
-    std::this_thread::sleep_for(1s); // 等待云台转动到位
-    return "";
+    std::this_thread::sleep_for(4s); // 等待云台转动到位
+    return json();
 }
 
 json ptz_mqtt::set_lamp(const json& args) {
@@ -314,7 +354,7 @@ json ptz_mqtt::set_lamp(const json& args) {
     command["action"] = 2;
     std::string payload = command.dump();
     mqtt_pub(pantilt_ctrl_topic, payload);
-    return "";
+    return json();
 }
 
 json ptz_mqtt::restart(const json& args) {
@@ -323,7 +363,7 @@ json ptz_mqtt::restart(const json& args) {
     std::string payload = command.dump();
     mqtt_pub(pantilt_ctrl_topic, payload);
     std::this_thread::sleep_for(5s);
-    return "";
+    return json();
 }
 
 json ptz_mqtt::adjust(const json& args) {
@@ -332,7 +372,7 @@ json ptz_mqtt::adjust(const json& args) {
     std::string payload = command.dump();
     mqtt_pub(pantilt_ctrl_topic, payload);
     std::this_thread::sleep_for(5s);
-    return "";
+    return json();
 }
 
 json ptz_mqtt::get_status() {
@@ -353,7 +393,7 @@ json pad_mqtt::set_left_servo(const json& args) {
     command["action"] = 1;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":2,"arg":45}
@@ -362,7 +402,7 @@ json pad_mqtt::set_right_servo(const json& args) {
     command["action"] = 2;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":3,"arg":45}
@@ -371,7 +411,7 @@ json pad_mqtt::set_left_lamp(const json& args) {
     command["action"] = 3;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
-    return "";
+    return json();
 }
 
 //{"action":4,"arg":45}
@@ -380,7 +420,6 @@ json pad_mqtt::set_right_lamp(const json& args) {
     command["action"] = 4;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
-    return "";
+    return json();
 }
-
 }; // namespace robot_device

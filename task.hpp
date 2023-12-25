@@ -17,6 +17,8 @@ public:
            EXEC_RESULT = 3,
            END = 4,
            CANCEL = 6,
+           MACHINE_EXCEPTION = 7,
+           INSTRUCTION_EXCEPTION = 8,
            REQ_PAUSE,
            REQ_RESUME,
            REQ_CANCEL
