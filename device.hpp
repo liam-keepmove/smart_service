@@ -94,7 +94,7 @@ private:
         {"0", std::bind(&action_body::stop_move, this, std::placeholders::_1)},
         {"1", std::bind(&action_body::speed_front_move, this, std::placeholders::_1)},
         {"2", std::bind(&action_body::speed_back_move, this, std::placeholders::_1)},
-        {"3", std::bind(&action_body::location_speed_move, this, std::placeholders::_1)},
+        {"TrackMovePosition", std::bind(&action_body::location_speed_move, this, std::placeholders::_1)},
         {"4", std::bind(&action_body::to_charge, this, std::placeholders::_1)},
         {"5", std::bind(&action_body::motor_reset, this, std::placeholders::_1)},
         {"6", std::bind(&action_body::restart, this, std::placeholders::_1)},

@@ -7,7 +7,6 @@
 #include <iostream>
 #include <regex>
 #include <spdlog/spdlog.h>
-using json = nlohmann::ordered_json;
 extern config_item global_config;
 
 // 根据timed_task_list更新cron_file和task_file

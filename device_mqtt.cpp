@@ -158,7 +158,7 @@ json action_body_mqtt::location_speed_move(const json& args) {
                 current_location = msg_json.at("position").get<int>();
                 spdlog::info("current_location:{},target_location:{}", current_location, target_location);
                 // 在20mm误差之内,意味着到达位置了,否则就是未到达位置.
-                if (std::abs(current_location - target_location) <= 20) {
+                if (std::abs(current_location - target_location) <= 40) {
                     object->done = true;
                     result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
                     break;

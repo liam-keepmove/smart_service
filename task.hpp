@@ -3,6 +3,7 @@
 #include "robot.hpp"
 #include <atomic>
 #include <mutex>
+#include <optional>
 
 class task {
 public:
@@ -33,8 +34,9 @@ private:
     robot* bot = nullptr;
 
     using task_step_callback = std::function<void(json)>;
+    task_step_callback empty_callback = [](json) {};
 
-    json generate_feedback(int active_no, int status, const std::string& result = "", const std::string& remark = "", const std::string& tag = "");
+    json generate_feedback(int active_no, int status, const std::string& result, const std::optional<std::string>& remark, const std::optional<std::string>& tag);
 
 public:
     struct action {
@@ -42,8 +44,8 @@ public:
         std::string device_code;
         std::string active_code;
         json active_args;
-        std::string remark;
-        std::string tag;
+        std::optional<std::string> remark;
+        std::optional<std::string> tag;
         friend void from_json(const json& j, action& a);
     };
 
@@ -52,9 +54,6 @@ public:
 
     // 任务执行到第几步了
     int active_no = 0;
-
-    // 任务备注
-    std::string remark;
 
     // 任务id
     std::string id;
@@ -65,8 +64,11 @@ public:
     // 任务执行的次数,不论任务执行结果如何,开始执行即算一次,
     int executed_count = 0;
 
+    // 任务备注
+    std::optional<std::string> remark;
+
     // 冗余字段
-    std::string tag;
+    std::optional<std::string> tag;
 
     // 任务动作列表
     std::vector<action> action_list;
@@ -90,12 +92,12 @@ public:
     bool is_over();
     bool is_empty();
 
-    task_step_callback task_will_start_callback = nullptr;
-    task_step_callback action_start_callback = nullptr;
-    task_step_callback action_result_callback = nullptr;
-    task_step_callback pause_callback = nullptr;
-    task_step_callback cancel_callback = nullptr;
-    task_step_callback over_callback = nullptr;
+    task_step_callback task_will_start_callback = empty_callback;
+    task_step_callback action_start_callback = empty_callback;
+    task_step_callback action_result_callback = empty_callback;
+    task_step_callback pause_callback = empty_callback;
+    task_step_callback cancel_callback = empty_callback;
+    task_step_callback over_callback = empty_callback;
 
     friend void from_json(const json& j, task& t);
 };

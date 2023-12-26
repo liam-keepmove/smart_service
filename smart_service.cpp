@@ -325,14 +325,14 @@ public:
 int main() {
     try {
         robot bot;
-        bot.add_device("Robot", std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
+        bot.add_device(global_config.robot_id, std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
         spdlog::info("add_device:Robot ,id:{}", global_config.robot_id);
         for (const auto& module : global_config.modules) {
             if (module.module_name == "PanTilt") {
-                bot.add_device(module.module_name, std::make_unique<robot_device::ptz_mqtt>(module.module_id));
+                bot.add_device(module.module_id, std::make_unique<robot_device::ptz_mqtt>(module.module_id));
                 spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
             } else if (module.module_name == "Pad") {
-                bot.add_device(module.module_name, std::make_unique<robot_device::pad_mqtt>(module.module_id));
+                bot.add_device(module.module_id, std::make_unique<robot_device::pad_mqtt>(module.module_id));
                 spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
             } else {
                 spdlog::warn("unknow module");

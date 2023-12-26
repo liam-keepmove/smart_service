@@ -5,6 +5,19 @@
 #include <thread>
 using namespace std::chrono_literals;
 
+NLOHMANN_JSON_NAMESPACE_BEGIN
+template <typename T>
+struct adl_serializer<std::optional<T>> {
+    static void to_json(json& j, const std::optional<T>& opt) {
+        j = opt.has_value() ? json(*opt) : json(nullptr);
+    }
+
+    static void from_json(const json& j, std::optional<T>& opt) {
+        opt = j.is_null() ? std::nullopt : std::make_optional<T>(j.get<T>());
+    }
+};
+NLOHMANN_JSON_NAMESPACE_END
+
 void from_json(const json& j, task::action& a) {
     j.at("no").get_to(a.no);
     j.at("device_code").get_to(a.device_code);
@@ -73,7 +86,7 @@ int task::get_status() {
     return status;
 }
 
-json task::generate_feedback(int active_no, int status, const std::string& result, const std::string& remark, const std::string& tag) {
+json task::generate_feedback(int active_no, int status, const std::string& result, const std::optional<std::string>& remark, const std::optional<std::string>& tag) {
     static json feedback;
     feedback["task_id"] = id;
     feedback["count"] = executed_count;
@@ -94,11 +107,8 @@ void task::run(robot& qibot) {
     }
     this->bot = &qibot;
     using namespace std::chrono_literals;
-#define XX(callback, json_obj) \
-    if (callback != nullptr)   \
-        callback(json_obj);
     ++executed_count;
-    XX(task_will_start_callback, generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
+    task_will_start_callback(generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
     active_no = 0;
     status = EXECING;
     // 这里只允许更新status,在暂停,恢复,取消函数里只允许更新req_status
@@ -107,7 +117,7 @@ void task::run(robot& qibot) {
         if (req_status == REQ_CANCEL) {
             if (status == EXECING) {
                 status = CANCEL;
-                XX(cancel_callback, generate_feedback(active_no, CANCEL, "The task will cancel.", tag)); // 任务取消反馈
+                cancel_callback(generate_feedback(active_no, CANCEL, "", "The task will cancel.", tag)); // 任务取消反馈
                 break;
             }
         }
@@ -118,7 +128,7 @@ void task::run(robot& qibot) {
         if (req_status == REQ_PAUSE) {
             if (status == EXECING) {
                 status = PAUSE;
-                XX(pause_callback, generate_feedback(active_no, PAUSE, "The task will pause.", tag)); // 任务暂停反馈
+                pause_callback(generate_feedback(active_no, PAUSE, "", "The task will pause.", tag)); // 任务暂停反馈
                 while (req_status != REQ_RESUME && req_status != REQ_CANCEL) {                        // 暂停时阻塞住
                     std::this_thread::sleep_for(100ms);
                 }
@@ -128,7 +138,7 @@ void task::run(robot& qibot) {
             status = EXECING;
             auto active = action_list.at(i);
             active_no = active.no;
-            XX(action_start_callback, generate_feedback(active_no, EXECING, "", "The action will exec", active.tag)); // 任务执行中反馈
+            action_start_callback(generate_feedback(active_no, EXECING, "", "The action will exec", active.tag)); // 任务执行中反馈
             json result;
             try {
                 result = bot->get_device(active.device_code)->get_action(active.active_code)(active.active_args);
@@ -137,31 +147,31 @@ void task::run(robot& qibot) {
 
                 } else {
                     // 正常返回,执行下一个动作
-                    XX(action_result_callback, generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                    action_result_callback(generate_feedback(active_no, EXEC_RESULT, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
                     ++i;
                 }
             } catch (const std::out_of_range& ex) {
                 spdlog::error("device_code or active_code no found");
                 result["remark"] = "Executed fail, device_code or active_code no found";
-                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                action_result_callback(generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
                 spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 break;
             } catch (const json::parse_error& ex) {
                 spdlog::error("json parse error");
                 result["remark"] = "Executed fail, json parse error";
-                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                action_result_callback(generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
                 spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 break;
             } catch (const json::out_of_range& ex) {
                 spdlog::error("key of json no found");
                 result["remark"] = "Executed fail, key of json no found";
-                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                action_result_callback(generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
                 spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 break;
             } catch (const json::type_error& ex) {
                 spdlog::error("json type parse error");
                 result["remark"] = "Executed fail, json type parse error";
-                XX(action_result_callback, generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
+                action_result_callback(generate_feedback(active_no, INSTRUCTION_EXCEPTION, result.dump(0), active.remark, active.tag)); // 任务执行结果反馈
                 spdlog::info("throw info:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 break;
             }
@@ -169,7 +179,7 @@ void task::run(robot& qibot) {
     }
     status = END;
     // 任务结束回调
-    XX(over_callback, generate_feedback(active_no, END, "The task is over.", remark, tag));
+    over_callback(generate_feedback(active_no, END, "The task is over.", remark, tag));
 #undef XX
 }
 
