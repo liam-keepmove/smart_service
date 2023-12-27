@@ -33,6 +33,9 @@ device_mqtt.o: device_mqtt.cpp device_mqtt.hpp device.hpp json.hpp misc.hpp conf
 image_detect.o: image_detect.cpp image_detect.hpp json.hpp misc.hpp
 	g++ ${FLAGS} -c image_detect.cpp ${PKG}
 
+battery_moniter.out: battery_moniter.cpp json.hpp config.hpp
+	g++ ${FLAGS} battery_moniter.cpp -o battery_moniter.out ${PKG} ${RPATH}
+
 powerstart:
 	@echo "Change the script parameter \"WorkingDirectory=\" to the current directory"
 	@sed -i "s\WorkingDirectory=.*\WorkingDirectory=`pwd`\g" $(SYSTEMD_SERVICE_NAME)
