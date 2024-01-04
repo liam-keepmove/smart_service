@@ -22,7 +22,12 @@ void from_json(const json& j, task::action& a) {
     j.at("no").get_to(a.no);
     j.at("device_code").get_to(a.device_code);
     j.at("active_code").get_to(a.active_code);
-    a.active_args = json::parse(j.at("active_args").template get<std::string>());
+    json args = j.at("active_args");
+    json arg;
+    if (!args.at("arg").is_null())
+        arg = json::parse(args.at("arg").template get<std::string>());
+    args["arg"] = arg;
+    a.active_args = args;
     j.at("remark").get_to(a.remark);
     j.at("tag").get_to(a.tag);
 }

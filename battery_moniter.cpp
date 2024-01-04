@@ -30,20 +30,22 @@ int main(){
             for (const auto& battery_info : battery_info_array) {
                 double amp = battery_info.at("Amp").template get<double>();
                 if(amp > 0){  //有充电电流,正在充电了
-                    spdlog::info("Charging...");
+                    spdlog::info("有充电电流,所以不需要再发充电指令");
                     return 1;
                 }
                 all_nom_cap += battery_info.at("NomCap").template get<double>(); 
                 all_rem_cap += battery_info.at("RemCap").template get<double>(); 
             }
-            double battery_percentage = (all_rem_cap / all_nom_cap) * 100;
+            int battery_percentage = (all_rem_cap / all_nom_cap) * 100;
             if (battery_percentage <= battery_threshold) {
                 mosquitto_publish(mosq, nullptr, robot_ctrl_topic.c_str(), charge_payload.size(), charge_payload.c_str(), 2, false);
-                spdlog::info("go to charge...");
+                spdlog::info("当前电量为{}%,小于等于{}%,且没有充电电流,发送充电指令让机器人去充电", battery_percentage, battery_threshold);
+            } else {
+                spdlog::info("当前电量为{}%,大于{}%,不发送充电指令", battery_percentage, battery_threshold);
             }
             return 1;
         },
         nullptr, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "battery_moniter", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr);
-        std::this_thread::sleep_for(10min);
+        std::this_thread::sleep_for(5min);
     }
 }

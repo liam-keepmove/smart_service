@@ -9,8 +9,17 @@ struct config_item {
 private:
     // 组件结构体
     struct module {
-        std::string module_name;
-        std::string module_id;
+        std::string type;
+        std::string name;
+        std::string id;
+        // 如果两个对象 a 与 b 相互比较不小于对方,那么认为它们set认为等价,所以不插入,简而言之,true插入,false不插入
+        bool operator<(const module& other) const {
+            if (name == other.name)
+                return false;
+            if (id == other.id)
+                return false;
+            return true;
+        }
     };
 
 public:
@@ -21,7 +30,7 @@ public:
     int broker_keep_alive;
     std::string mqtt_client_id;
     std::string robot_id;
-    std::vector<module> modules;
+    std::set<module> modules;
 
     config_item(const std::string& filename) {
         try {
@@ -36,9 +45,10 @@ public:
             const YAML::Node& modules_node = node["modules"];
             for (const auto& module_node : modules_node) {
                 module module;
-                module.module_name = module_node["module_name"].as<std::string>();
-                module.module_id = module_node["module_id"].as<std::string>();
-                modules.push_back(module);
+                module.type = module_node["type"].as<std::string>();
+                module.name = module_node["name"].as<std::string>();
+                module.id = module_node["id"].as<std::string>();
+                modules.emplace(module);
             }
 
         } catch (const YAML::Exception& e) {

@@ -84,6 +84,9 @@ public:
     // 音量调节
     json set_volume(const json& args) override;
 
+    // 等待
+    json wait(const json& args) override;
+
     void stop() override;
 
 private:

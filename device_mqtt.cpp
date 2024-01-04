@@ -314,6 +314,11 @@ json action_body_mqtt::set_volume(const json& args) {
     return json();
 }
 
+json action_body_mqtt::wait(const json& args) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(args.at("arg").template get<int>()));
+    return json();
+}
+
 void action_body_mqtt::stop() {
     if (status == RUNNING) {
         stop_move(json::parse("{\"arg\": null}"));

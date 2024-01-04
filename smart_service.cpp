@@ -30,8 +30,6 @@ public:
         "/SmartSer/Robot/Heart/" + robot_id,
         "/SmartSer/Robot/CtrlMove/" + robot_id,
         "/SmartSer/Robot/CtrlOther/" + robot_id,
-        "/SmartSer/PanTilt/Ctrl/" + robot_id,
-        "/SmartSer/Pad/Ctrl/" + robot_id,
     };
     timed_task_set timed_set{"/etc/cron.d/timed_task_robot", task_recv_topic}; // crontab的定时任务文件
     task current_task;
@@ -40,6 +38,15 @@ public:
 
     smart_service(robot&& b)
         : bot(std::move(b)) {
+        for (const auto& module : global_config.modules) {
+            if (module.type == "PanTilt") {
+                forward_topics.emplace_back("/SmartSer/PanTilt/Ctrl/" + module.id);
+            } else if (module.type == "Pad") {
+                forward_topics.emplace_back("/SmartSer/Pad/Ctrl/" + module.id);
+            } else {
+                spdlog::warn("unknow module info,type:{},name:{},id:{},Unable to forward this topic,ignored", module.type, module.name, module.id);
+            }
+        }
     }
 
     ~smart_service() {
@@ -326,16 +333,16 @@ int main() {
     try {
         robot bot;
         bot.add_device(global_config.robot_id, std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
-        spdlog::info("add_device:Robot ,id:{}", global_config.robot_id);
+        spdlog::info("add_device:action_body,name:Robot,id:{}", global_config.robot_id);
         for (const auto& module : global_config.modules) {
-            if (module.module_name == "PanTilt") {
-                bot.add_device(module.module_id, std::make_unique<robot_device::ptz_mqtt>(module.module_id));
-                spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
-            } else if (module.module_name == "Pad") {
-                bot.add_device(module.module_id, std::make_unique<robot_device::pad_mqtt>(module.module_id));
-                spdlog::info("add_device:{},id:{}", module.module_name, module.module_id);
+            if (module.type == "PanTilt") {
+                bot.add_device(module.name, std::make_unique<robot_device::ptz_mqtt>(module.id));
+                spdlog::info("add_device:{},name:{},id:{}", module.type, module.name, module.id);
+            } else if (module.type == "Pad") {
+                bot.add_device(module.name, std::make_unique<robot_device::pad_mqtt>(module.id));
+                spdlog::info("add_device:{},name:{},id:{}", module.type, module.name, module.id);
             } else {
-                spdlog::warn("unknow module");
+                spdlog::warn("unknow module info,type:{},name:{},id:{},Can't be combined into a robot,ignored", module.type, module.name, module.id);
             }
         }
         smart_service smart_ser{std::move(bot)};
