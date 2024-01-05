@@ -35,8 +35,8 @@ void from_json(const json& j, task::action& a) {
 void from_json(const json& j, task& t) {
     j.at("id").get_to(t.id);
     j.at("priority").get_to(t.priority);
-    j.at("max_count").get_to(t.max_count);
-    j.at("executed_count").get_to(t.executed_count);
+    t.executed_count = j.value("executed_count", 0);
+    t.max_count = j.value("max_count", 1);
     j.at("remark").get_to(t.remark);
     j.at("tag").get_to(t.tag);
     json action_list_array = j.at("action_list");
@@ -106,21 +106,26 @@ json task::generate_feedback(int active_no, int status, const std::string& resul
 
 void task::run(robot& qibot) {
     std::scoped_lock lock(run_sche); // 同一时刻,只能有一个调度器在运行
+    using namespace std::chrono_literals;
+    task_will_start_callback(generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
     if (executed_count >= max_count) {
-        spdlog::error("The number of tasks that can be executed is insufficient.");
+        status = END;
+        // 任务结束回调
+        over_callback(generate_feedback(active_no, END, "The number of tasks that can be executed is insufficient.", remark, tag));
         return;
+    } else {
+        ++executed_count;
     }
     this->bot = &qibot;
-    using namespace std::chrono_literals;
-    ++executed_count;
-    task_will_start_callback(generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
     active_no = 0;
     status = EXECING;
     // 这里只允许更新status,在暂停,恢复,取消函数里只允许更新req_status
     for (int i = 0; i < action_list.size();) {
-        // 注意,req_status可以随时被外部修改
+        // 注意,req_status必须是顺序处理的,不能跳过,例如:
+        // 当前状态是EXECING,请求队列是REQ_CANCEL,REQ_RESUME,那当处理完REQ_CANCEL后,任务取消了,那么REQ_RESUME就失效了
+        // 如果只是抢占式处理,那么就会出现已经请求取消的任务还能继续执行的情况,所以必须顺序处理
         if (req_status == REQ_CANCEL) {
-            if (status == EXECING) {
+            if (status == EXECING || status == PAUSE) {
                 status = CANCEL;
                 cancel_callback(generate_feedback(active_no, CANCEL, "", "The task will cancel.", tag)); // 任务取消反馈
                 break;
@@ -182,10 +187,10 @@ void task::run(robot& qibot) {
             }
         }
     }
+
     status = END;
     // 任务结束回调
     over_callback(generate_feedback(active_no, END, "The task is over.", remark, tag));
-#undef XX
 }
 
 void task::pause() {
