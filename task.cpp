@@ -209,7 +209,8 @@ void task::pause() {
 void task::resume() {
     std::scoped_lock lock(control);
     if (status == PAUSE) {
-        req_status = EXECING;
+        req_status = REQ_RESUME;
+        std::this_thread::sleep_for(100ms);
         if (status != EXECING && status != END) {
             spdlog::info("waiting for current task resume...");
             while (status != EXECING && status != END) {
