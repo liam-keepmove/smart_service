@@ -6,7 +6,8 @@ PKG += -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/
 PKG += -I./third/mosquitto-2.0.15/include -L./third/mosquitto-2.0.15/lib -lmosquitto
 PKG += -DSPDLOG_COMPILED_LIB -I./third/spdlog-1.12.0/include/ -L./third/spdlog-1.12.0/build/ -lspdlog -lpthread
 PKG += -I./third/curl-8.4.0/include/ -L./third/curl-8.4.0/lib/.libs/ -lcurl
-PKG += `pkg-config --cflags --libs opencv4 yaml-cpp`
+PKG += -I./third/yaml-cpp-0.8.0/include/ -L./third/yaml-cpp-0.8.0/build/ -lyaml-cpp
+PKG += `pkg-config --cflags --libs opencv4`
 RPATH += -Wl,-rpath,'$$ORIGIN'/:'$$ORIGIN'/lib/:'$$ORIGIN'/third/curl-8.4.0/lib/.libs/:'$$ORIGIN'/third/mosquitto-2.0.15/lib/:'$$ORIGIN'/third/spdlog-1.12.0/build/
 
 smart_service.out: smart_service.o task.o timed_task.o robot.o device_mqtt.o image_detect.o
