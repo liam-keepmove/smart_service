@@ -35,8 +35,14 @@ void from_json(const json& j, task::action& a) {
 void from_json(const json& j, task& t) {
     j.at("id").get_to(t.id);
     j.at("priority").get_to(t.priority);
+    if (t.priority < 0 || t.priority > 999) {
+        throw std::runtime_error("priority must be in [0,999]");
+    }
     t.executed_count = j.value("executed_count", 0);
     t.max_count = j.value("max_count", 1);
+    if (t.executed_count >= t.max_count) {
+        throw std::runtime_error("executed_count must be less than max_count");
+    }
     j.at("remark").get_to(t.remark);
     j.at("tag").get_to(t.tag);
     json action_list_array = j.at("action_list");

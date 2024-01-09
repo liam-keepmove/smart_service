@@ -8,7 +8,7 @@ After=network-online.target multi-user.target
 Type=simple
 # makefile会更新根目录
 WorkingDirectory=/root/smart_service
-ExecStart=bash -c "cd `pwd` && mkdir logs && ./smart_service.out >> logs/smart_service.log & sleep 2 && ./battery_moniter.out >> logs/battery_moniter.log"
+ExecStart=bash -c "cd `pwd` && mkdir -p logs && ./smart_service.out >> logs/smart_service.log"
 ExecStop=-bash -c "`pwd`/mqttx pub -V 3.1.1 --username 'admin' --password 'abcd1234' -h '127.0.0.1' -p 1883 -t '/SmartSer/Debug' -q 2 -m 'debug_exit'"
 ExecStopPost=-sleep 3
 # 除了使用systemd stop service,不然只要关闭就重开

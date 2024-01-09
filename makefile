@@ -37,9 +37,6 @@ image_detect.o: image_detect.cpp image_detect.hpp json.hpp misc.hpp
 config.o: config.cpp config.hpp
 	g++ ${FLAGS} -c config.cpp
 
-battery_moniter.out: battery_moniter.cpp json.hpp config.o
-	g++ ${FLAGS} battery_moniter.cpp -o battery_moniter.out ${PKG} ${RPATH}
-
 powerstart:
 	@echo "Change the script parameter \"WorkingDirectory=\" to the current directory"
 	@sed -i "s\WorkingDirectory=.*\WorkingDirectory=`pwd`\g" $(SYSTEMD_SERVICE_NAME)

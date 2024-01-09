@@ -213,6 +213,7 @@ json action_body_mqtt::to_charge(const json& args) {
 
                 int all_battery_full = 1;
                 json battery_info_array = msg_json.at("BatteryPack");
+                spdlog::info("battery_info_array:");
                 for (const auto& battery_info : battery_info_array) {
                     double nom_cap = battery_info.at("NomCap").template get<double>(); // 标定电池容量
                     double rem_cap = battery_info.at("RemCap").template get<double>(); // 剩余电池容量

@@ -4,6 +4,7 @@ broker_username: admin
 broker_password: abcd1234
 broker_keep_alive: 10
 mqtt_client_id: mosquitto_hj
+battery_threshold: 20
 robot_type: Pad
 robot_id: 2885688118
 modules:

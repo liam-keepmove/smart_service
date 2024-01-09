@@ -23,6 +23,7 @@ config_item::config_item(const std::string& filename) {
         mqtt_client_id = node["mqtt_client_id"].as<std::string>();
         robot_type = node["robot_type"].as<std::string>();
         robot_id = node["robot_id"].as<std::string>();
+        battery_threshold = node["battery_threshold"].as<int>();
         const YAML::Node& modules_node = node["modules"];
         for (const auto& module_node : modules_node) {
             module module;

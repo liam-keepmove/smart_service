@@ -8,6 +8,7 @@
 #include "task.hpp"
 #include "timed_task.hpp"
 #include <array>
+#include <cassert>
 #include <cstdlib>
 #include <signal.h>
 #include <spdlog/spdlog.h>
@@ -23,10 +24,12 @@ class smart_service {
 public:
     // 以下配置项由全局配置项合成
     std::string robot_id = global_config.robot_id;
-    std::string task_recv_topic = "/SmartSer/Robot/Task/" + robot_id;
-    std::string task_feedback_topic = "/SmartSer/Robot/TaskStatus/" + robot_id;
-    std::string task_debug_topic = "/SmartSer/Debug";
+    std::string robot_battery_topic = "/Robot/Battery/" + robot_id;             // 订阅
+    std::string task_recv_topic = "/SmartSer/Robot/Task/" + robot_id;           // 订阅
+    std::string task_feedback_topic = "/SmartSer/Robot/TaskStatus/" + robot_id; // 发送
+    std::string task_debug_topic = "/SmartSer/Debug";                           // 订阅
     std::vector<std::string> forward_topics = {
+        // 订阅
         "/SmartSer/Robot/Heart/" + robot_id,
         "/SmartSer/Robot/CtrlMove/" + robot_id,
         "/SmartSer/Robot/CtrlOther/" + robot_id,
@@ -51,6 +54,8 @@ public:
     }
 
     ~smart_service() {
+        // 智能服务结束,取消当前任务
+        current_task.cancel();
         mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
     }
@@ -71,6 +76,7 @@ public:
             }
             spdlog::info("mqtt connection is successful");
             auto object = (smart_service*)obj;
+
             for (const auto& topic : object->forward_topics) {
                 spdlog::info("Prepare to subscribe {} topics.", topic);
                 int rc = mosquitto_subscribe(mosq, nullptr, topic.c_str(), 2);
@@ -78,13 +84,21 @@ public:
                     THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
                 }
             }
+
             spdlog::info("Prepare to subscribe {} topics.", object->task_recv_topic);
             int rc = mosquitto_subscribe(mosq, nullptr, object->task_recv_topic.c_str(), 2);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
+
             spdlog::info("Prepare to subscribe {} topics.", object->task_debug_topic);
             rc = mosquitto_subscribe(mosq, nullptr, object->task_debug_topic.c_str(), 2);
+            if (rc != MOSQ_ERR_SUCCESS) {
+                THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
+            }
+
+            spdlog::info("Prepare to subscribe {} topics.", object->robot_battery_topic);
+            rc = mosquitto_subscribe(mosq, nullptr, object->robot_battery_topic.c_str(), 0);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
@@ -161,7 +175,6 @@ public:
     // 设置当前任务,设置成功返回true,失败返回false
     bool set_current_task(const task& new_task) {
         if (!current_task.is_over() && new_task.priority < current_task.priority) {
-            spdlog::info("fail of set current task, because the priority of new task is lower than current task");
             return false;
         };
         if (!current_task.is_empty()) {
@@ -255,14 +268,16 @@ public:
             }
             break;
         case 3: // 开始即时任务
-            if (set_current_task(task(task_json))) {
-                std::thread(&task::run, &current_task, std::ref(bot)).detach(); // 当前任务设置成功后,立即开一个线程执行此任务
-            } else {
+            try {
+                if (!set_current_task(task(task_json))) {
+                    throw std::runtime_error("fail of set current task, because the priority of new task is lower than current task");
+                }
+            } catch (const std::runtime_error& err) {
                 // 开始即时任务失败
                 result["task_id"] = task_json.at("id");
                 result["type"] = 9;
                 result["status"] = 2;
-                result["remark"] = "A task is currently executing, but the new task has a lower priority than the current task and cannot be set";
+                result["remark"] = err.what();
                 result["tag"] = task_json.at("tag");
                 result_str = result.dump(4);
                 int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), result_str.size(), result_str.c_str(), 2, false);
@@ -272,6 +287,7 @@ public:
                     spdlog::error("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
                 }
             }
+            std::thread(&task::run, &current_task, std::ref(bot)).detach(); // 当前任务设置成功后,立即开一个线程执行此任务
             break;
         case 4: // 暂停当前任务
             current_task.pause();
@@ -317,16 +333,33 @@ public:
                 }
             } else if (strcmp(msg->topic, task_debug_topic.c_str()) == 0) {
                 if (std::strcmp((const char*)msg->payload, "debug_exit") == 0) { // debug退出方式
-                    spdlog::info("exit");
+                    spdlog::info("debug_exit");
                     break;
+                }
+            } else if (strcmp(msg->topic, robot_battery_topic.c_str()) == 0) {
+                json msg_json = json::parse((char*)msg->payload);
+                json battery_info_array = msg_json.at("BatteryPack");
+                double all_nom_cap = 0; // 标定电池容量
+                double all_rem_cap = 0; // 剩余电池容量
+                for (const auto& battery_info : battery_info_array) {
+                    double amp = battery_info.at("Amp").template get<double>();
+                    all_nom_cap += battery_info.at("NomCap").template get<double>();
+                    all_rem_cap += battery_info.at("RemCap").template get<double>();
+                }
+                int battery_percentage = (all_rem_cap / all_nom_cap) * 100; // 计算出电量百分比
+                if (battery_percentage < global_config.battery_threshold) { // 当前电量百分比小于阈值
+                    spdlog::info("battery_percentage:{}% < battery_threshold:{}%, first stop current task,and goto charge,then resume current task when over of charge.", battery_percentage, global_config.battery_threshold);
+                    current_task.pause();                                                                     // 先暂停任务
+                    bot.get_device(robot_id)->get_action("TrackRobotCharge")(json::parse("{\"arg\": null}")); // 执行充电动作
+                    current_task.resume();                                                                    // 再恢复任务
+                    mqtt_msg_queue.clear();
+                    spdlog::info("battery protect finish.");
                 }
             } else {
                 spdlog::warn("unknown message:\ntopic:{}\ncontent:{}", msg->topic, (char*)msg->payload);
             }
             mosquitto_message_free(&msg); // 记得释放
         }
-        // 程序结束前取消任务
-        current_task.cancel();
     }
 };
 

@@ -22,6 +22,7 @@ public:
     std::string mqtt_client_id;
     std::string robot_type;
     std::string robot_id;
+    int battery_threshold;
     std::set<module> modules;
 
     config_item(const std::string& filename);
