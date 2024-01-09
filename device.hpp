@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include <functional>
 #include <map>
+#include <memory>
 
 namespace robot_device {
 
@@ -92,7 +93,7 @@ public:
         return action_map.at(action_code);
     }
 
-private:
+protected:
     std::map<std::string, std::function<json(const json&)>> action_map{
         {"0", std::bind(&action_body::stop_move, this, std::placeholders::_1)},
         {"1", std::bind(&action_body::speed_front_move, this, std::placeholders::_1)},
@@ -143,6 +144,8 @@ private:
 
 class pad : public device {
 public:
+    std::unique_ptr<action_body> track_robot;
+
     // 左舵机控制
     virtual json set_left_servo(const json& args) = 0;
 
@@ -156,15 +159,19 @@ public:
     virtual json set_right_lamp(const json& args) = 0;
 
     std::function<json(const json&)> get_action(std::string action_code) {
-        return action_map.at(action_code);
+        try {
+            return track_robot->get_action(action_code);
+        } catch (const std::out_of_range&) {
+            return action_map.at(action_code);
+        }
     }
 
-private:
+protected:
     std::map<std::string, std::function<json(const json&)>> action_map{
-        {"1", std::bind(&pad::set_left_servo, this, std::placeholders::_1)},
-        {"2", std::bind(&pad::set_right_servo, this, std::placeholders::_1)},
-        {"3", std::bind(&pad::set_left_lamp, this, std::placeholders::_1)},
-        {"4", std::bind(&pad::set_right_lamp, this, std::placeholders::_1)},
+        {"PadCtrlLeftServoMotor", std::bind(&pad::set_left_servo, this, std::placeholders::_1)},
+        {"PadCtrlRightServoMotor", std::bind(&pad::set_right_servo, this, std::placeholders::_1)},
+        {"PadCtrlLeftLight", std::bind(&pad::set_left_lamp, this, std::placeholders::_1)},
+        {"PadCtrlRightLight", std::bind(&pad::set_right_lamp, this, std::placeholders::_1)},
     };
 };
 

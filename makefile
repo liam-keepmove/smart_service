@@ -1,6 +1,6 @@
 .PHONY: clean all install powerstart unpowerstart
 
-FLAGS += -g -std=c++17
+FLAGS += -std=c++17
 SYSTEMD_SERVICE_NAME=hljb_smart_service.service
 PKG += -I./third/cppcodec-0.2/ -L./third/cppcodec-0.2/ 
 PKG += -I./third/mosquitto-2.0.15/include -L./third/mosquitto-2.0.15/lib -lmosquitto
@@ -10,8 +10,8 @@ PKG += -I./third/yaml-cpp-0.8.0/include/ -L./third/yaml-cpp-0.8.0/build/ -lyaml-
 PKG += `pkg-config --cflags --libs opencv4`
 RPATH += -Wl,-rpath,'$$ORIGIN'/:'$$ORIGIN'/lib/:'$$ORIGIN'/third/curl-8.4.0/lib/.libs/:'$$ORIGIN'/third/mosquitto-2.0.15/lib/:'$$ORIGIN'/third/spdlog-1.12.0/build/
 
-smart_service.out: smart_service.o task.o timed_task.o robot.o device_mqtt.o image_detect.o
-	g++ ${FLAGS} task.o timed_task.o robot.o device_mqtt.o image_detect.o smart_service.o ${PKG} -o smart_service.out ${RPATH}
+smart_service.out: smart_service.o task.o timed_task.o robot.o device_mqtt.o image_detect.o config.o
+	g++ ${FLAGS} task.o timed_task.o robot.o device_mqtt.o image_detect.o smart_service.o config.o ${PKG} -o smart_service.out ${RPATH}
 
 smart_service.o: smart_service.cpp ThreadSafeQueue.hpp device_mqtt.hpp device.hpp json.hpp misc.hpp robot.hpp task.hpp timed_task.hpp config.hpp
 	g++ ${FLAGS} -c smart_service.cpp ${PKG}
@@ -34,7 +34,10 @@ device_mqtt.o: device_mqtt.cpp device_mqtt.hpp device.hpp json.hpp misc.hpp conf
 image_detect.o: image_detect.cpp image_detect.hpp json.hpp misc.hpp
 	g++ ${FLAGS} -c image_detect.cpp ${PKG}
 
-battery_moniter.out: battery_moniter.cpp json.hpp config.hpp
+config.o: config.cpp config.hpp
+	g++ ${FLAGS} -c config.cpp
+
+battery_moniter.out: battery_moniter.cpp json.hpp config.o
 	g++ ${FLAGS} battery_moniter.cpp -o battery_moniter.out ${PKG} ${RPATH}
 
 powerstart:

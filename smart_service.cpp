@@ -38,11 +38,12 @@ public:
 
     smart_service(robot&& b)
         : bot(std::move(b)) {
+        if (global_config.robot_type == "Pad") {
+            forward_topics.emplace_back("/SmartSer/Pad/Ctrl/" + global_config.robot_id);
+        }
         for (const auto& module : global_config.modules) {
             if (module.type == "PanTilt") {
                 forward_topics.emplace_back("/SmartSer/PanTilt/Ctrl/" + module.id);
-            } else if (module.type == "Pad") {
-                forward_topics.emplace_back("/SmartSer/Pad/Ctrl/" + module.id);
             } else {
                 spdlog::warn("unknow module info,type:{},name:{},id:{},Unable to forward this topic,ignored", module.type, module.name, module.id);
             }
@@ -330,29 +331,29 @@ public:
 };
 
 int main() {
-    try {
-        robot bot;
+    robot bot;
+    if (global_config.robot_type == "TrackRobot") {
         bot.add_device(global_config.robot_id, std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));
-        spdlog::info("add_device:action_body,name:Robot,id:{}", global_config.robot_id);
-        for (const auto& module : global_config.modules) {
-            if (module.type == "PanTilt") {
-                bot.add_device(module.name, std::make_unique<robot_device::ptz_mqtt>(module.id));
-                spdlog::info("add_device:{},name:{},id:{}", module.type, module.name, module.id);
-            } else if (module.type == "Pad") {
-                bot.add_device(module.name, std::make_unique<robot_device::pad_mqtt>(module.id));
-                spdlog::info("add_device:{},name:{},id:{}", module.type, module.name, module.id);
-            } else {
-                spdlog::warn("unknow module info,type:{},name:{},id:{},Can't be combined into a robot,ignored", module.type, module.name, module.id);
-            }
-        }
-        smart_service smart_ser{std::move(bot)};
-        smart_ser.start_mqtt();
-        smart_ser.mqtt_msg_handler();
-    } catch (const std::bad_alloc& ex) {
-        spdlog::info("bad_alloc error:\n{}", ex.what());
-    } catch (const std::runtime_error& ex) {
-        spdlog::info("runtime error:\n{}", ex.what());
+        spdlog::info("add_device:track_action_body,name:{},id:{}", global_config.robot_id, global_config.robot_id);
+    } else if (global_config.robot_type == "Pad") {
+        bot.add_device(global_config.robot_id, std::make_unique<robot_device::pad_mqtt>(global_config.robot_id));
+        spdlog::info("add_device:pad_action_body,name:{},id:{}", global_config.robot_id, global_config.robot_id);
+    } else {
+        spdlog::error("unknown robot_type");
+        return -1;
     }
+    for (const auto& module : global_config.modules) {
+        if (module.type == "PanTilt") {
+            bot.add_device(module.name, std::make_unique<robot_device::ptz_mqtt>(module.id));
+            spdlog::info("add_device:{},name:{},id:{}", module.type, module.name, module.id);
+        } else {
+            spdlog::warn("unknow module info,type:{},name:{},id:{},Can't be combined into a robot,ignored", module.type, module.name, module.id);
+        }
+    }
+    smart_service smart_ser{std::move(bot)};
+    smart_ser.start_mqtt();
+    smart_ser.mqtt_msg_handler();
+
     //     std::string json_str = R"(
     //         {
     //             "Base64Img": "",

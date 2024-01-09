@@ -46,6 +46,10 @@ timed_task_set::timed_task_set(const std::string& cron_file_path, const std::str
         std::ofstream ofs(cron_file_path);
         ofs.close();
     }
+    if (!std::filesystem::exists(task_file_path)) {
+        // 若此文件夹不存在,新建一个空文件夹
+        std::filesystem::create_directory(task_file_path);
+    }
     std::ifstream cron_file(cron_file_path);
     if (!cron_file.is_open()) {
         THROW_RUNTIME_ERROR("Unable to open cron_file:" + cron_file_path);

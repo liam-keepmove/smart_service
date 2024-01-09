@@ -387,6 +387,7 @@ json ptz_mqtt::get_status() {
 }
 
 pad_mqtt::pad_mqtt(const std::string& id) {
+    track_robot = std::make_unique<robot_device::action_body_mqtt>(id);
     pad_id = id;
     pad_ctrl_topic += pad_id;
     pad_status_topic += pad_id;
@@ -398,6 +399,7 @@ json pad_mqtt::set_left_servo(const json& args) {
     command["action"] = 1;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
+    std::this_thread::sleep_for(1s);
     return json();
 }
 
@@ -407,6 +409,7 @@ json pad_mqtt::set_right_servo(const json& args) {
     command["action"] = 2;
     std::string payload = command.dump();
     mqtt_pub(pad_ctrl_topic, payload);
+    std::this_thread::sleep_for(1s);
     return json();
 }
 
