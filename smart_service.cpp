@@ -28,9 +28,9 @@ public:
     std::string task_recv_topic = "/SmartSer/Robot/Task/" + robot_id;           // 订阅
     std::string task_feedback_topic = "/SmartSer/Robot/TaskStatus/" + robot_id; // 发送
     std::string task_debug_topic = "/SmartSer/Debug";                           // 订阅
-    std::vector<std::string> forward_topics = {
+    std::string heart_forward_topic = "/SmartSer/Robot/Heart/" + robot_id;      // 订阅
+    std::vector<std::string> real_ctrl_forward_topics = {
         // 订阅
-        "/SmartSer/Robot/Heart/" + robot_id,
         "/SmartSer/Robot/CtrlMove/" + robot_id,
         "/SmartSer/Robot/CtrlOther/" + robot_id,
     };
@@ -42,11 +42,11 @@ public:
     smart_service(robot&& b)
         : bot(std::move(b)) {
         if (global_config.robot_type == "Pad") {
-            forward_topics.emplace_back("/SmartSer/Pad/Ctrl/" + global_config.robot_id);
+            real_ctrl_forward_topics.emplace_back("/SmartSer/Pad/Ctrl/" + global_config.robot_id);
         }
         for (const auto& module : global_config.modules) {
             if (module.type == "PanTilt") {
-                forward_topics.emplace_back("/SmartSer/PanTilt/Ctrl/" + module.id);
+                real_ctrl_forward_topics.emplace_back("/SmartSer/PanTilt/Ctrl/" + module.id);
             } else {
                 spdlog::warn("unknow module info,type:{},name:{},id:{},Unable to forward this topic,ignored", module.type, module.name, module.id);
             }
@@ -77,16 +77,23 @@ public:
             spdlog::info("mqtt connection is successful");
             auto object = (smart_service*)obj;
 
-            for (const auto& topic : object->forward_topics) {
+            int rc = 0;
+            for (const auto& topic : object->real_ctrl_forward_topics) {
                 spdlog::info("Prepare to subscribe {} topics.", topic);
-                int rc = mosquitto_subscribe(mosq, nullptr, topic.c_str(), 2);
+                rc = mosquitto_subscribe(mosq, nullptr, topic.c_str(), 2);
                 if (rc != MOSQ_ERR_SUCCESS) {
                     THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
                 }
             }
 
+            spdlog::info("Prepare to subscribe {} topics.", object->heart_forward_topic);
+            rc = mosquitto_subscribe(mosq, nullptr, object->heart_forward_topic.c_str(), 2);
+            if (rc != MOSQ_ERR_SUCCESS) {
+                THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
+            }
+
             spdlog::info("Prepare to subscribe {} topics.", object->task_recv_topic);
-            int rc = mosquitto_subscribe(mosq, nullptr, object->task_recv_topic.c_str(), 2);
+            rc = mosquitto_subscribe(mosq, nullptr, object->task_recv_topic.c_str(), 2);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
@@ -317,13 +324,22 @@ public:
         while (true) {
             mosquitto_message* msg = nullptr;
             mqtt_msg_queue.pop(msg);
-            if (std::find_if(forward_topics.begin(), forward_topics.end(), [msg](const std::string& topic) { return std::strcmp(msg->topic, topic.c_str()) == 0; }) != forward_topics.end()) {
+            if (strcmp(msg->topic, heart_forward_topic.c_str()) == 0) { // 心跳转发,替换成当前时间戳,防止后端和板子时间不匹配
+                json msg_json = json::parse((const char*)msg->payload);
+                msg_json["ts"] = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                std::string payload = msg_json.dump(0);
+                int rc = mosquitto_publish(mosq, nullptr, strchr(msg->topic + 1, '/'), payload.size(), payload.c_str(), 0, false);
+                if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
+                    spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
+                    spdlog::error("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
+                }
+            } else if (std::find_if(real_ctrl_forward_topics.begin(), real_ctrl_forward_topics.end(), [msg](const std::string& topic) { return std::strcmp(msg->topic, topic.c_str()) == 0; }) != real_ctrl_forward_topics.end()) {
                 // 实时控制
                 real_time_ctrl_handler(msg);
             } else if (strcmp(msg->topic, task_recv_topic.c_str()) == 0) {
                 // 任务控制
                 try {
-                    task_handler(json::parse((char*)(msg->payload)));
+                    task_handler(json::parse((const char*)(msg->payload)));
                 } catch (const json::parse_error& ex) {
                     spdlog::info("throw line:{}:{}\n{}", __FILE__, __LINE__, ex.what());
                 } catch (const json::out_of_range& ex) {
@@ -337,7 +353,7 @@ public:
                     break;
                 }
             } else if (strcmp(msg->topic, robot_battery_topic.c_str()) == 0) {
-                json msg_json = json::parse((char*)msg->payload);
+                json msg_json = json::parse((const char*)msg->payload);
                 json battery_info_array = msg_json.at("BatteryPack");
                 double all_nom_cap = 0; // 标定电池容量
                 double all_rem_cap = 0; // 剩余电池容量

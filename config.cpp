@@ -13,26 +13,22 @@ bool config_item::module::operator<(const module& other) const {
 }
 
 config_item::config_item(const std::string& filename) {
-    try {
-        YAML::Node node = YAML::LoadFile(filename);
-        broker_ip = node["broker_ip"].as<std::string>();
-        broker_port = node["broker_port"].as<int>();
-        broker_username = node["broker_username"].as<std::string>();
-        broker_password = node["broker_password"].as<std::string>();
-        broker_keep_alive = node["broker_keep_alive"].as<int>();
-        mqtt_client_id = node["mqtt_client_id"].as<std::string>();
-        robot_type = node["robot_type"].as<std::string>();
-        robot_id = node["robot_id"].as<std::string>();
-        battery_threshold = node["battery_threshold"].as<int>();
-        const YAML::Node& modules_node = node["modules"];
-        for (const auto& module_node : modules_node) {
-            module module;
-            module.type = module_node["type"].as<std::string>();
-            module.name = module_node["name"].as<std::string>();
-            module.id = module_node["id"].as<std::string>();
-            modules.emplace(module);
-        }
-    } catch (const YAML::Exception& e) {
-        spdlog::error("Error reading YAML config file: {}", e.what());
+    YAML::Node node = YAML::LoadFile(filename);
+    broker_ip = node["broker_ip"].as<std::string>();
+    broker_port = node["broker_port"].as<int>();
+    broker_username = node["broker_username"].as<std::string>();
+    broker_password = node["broker_password"].as<std::string>();
+    broker_keep_alive = node["broker_keep_alive"].as<int>();
+    mqtt_client_id = node["mqtt_client_id"].as<std::string>();
+    robot_type = node["robot_type"].as<std::string>();
+    robot_id = node["robot_id"].as<std::string>();
+    battery_threshold = node["battery_threshold"].as<int>();
+    const YAML::Node& modules_node = node["modules"];
+    for (const auto& module_node : modules_node) {
+        module module;
+        module.type = module_node["type"].as<std::string>();
+        module.name = module_node["name"].as<std::string>();
+        module.id = module_node["id"].as<std::string>();
+        modules.emplace(module);
     }
 }
