@@ -1,4 +1,4 @@
-.PHONY: clean all install powerstart unpowerstart
+.PHONY: clean all install powerstart unpowerstart pack
 
 FLAGS += -std=c++17
 SYSTEMD_SERVICE_NAME=hljb_smart_service.service
@@ -36,6 +36,9 @@ image_detect.o: image_detect.cpp image_detect.hpp json.hpp misc.hpp
 
 config.o: config.cpp config.hpp
 	g++ ${FLAGS} -c config.cpp
+
+pack:
+	tar -czf smart_service.tgz smart_service.out third/ mqttx hljb_smart_service.service makefile config.yml
 
 powerstart:
 	@echo "Change the script parameter \"WorkingDirectory=\" to the current directory"

@@ -192,7 +192,7 @@ public:
         current_task = new_task;
         static auto callback = [this](json task_feedback) {
             task_feedback["type"] = 8;
-            std::string feedback_str = task_feedback.dump();
+            std::string feedback_str = task_feedback.dump(4);
             int rc = mosquitto_publish(mosq, nullptr, task_feedback_topic.c_str(), feedback_str.size(), feedback_str.c_str(), 2, false);
             spdlog::info("send to topic \"{}\":{}", task_feedback_topic, feedback_str);
             if (rc != MOSQ_ERR_SUCCESS) {
@@ -327,7 +327,7 @@ public:
             if (strcmp(msg->topic, heart_forward_topic.c_str()) == 0) { // 心跳转发,替换成当前时间戳,防止后端和板子时间不匹配
                 json msg_json = json::parse((const char*)msg->payload);
                 msg_json["ts"] = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                std::string payload = msg_json.dump(0);
+                std::string payload = msg_json.dump(4);
                 int rc = mosquitto_publish(mosq, nullptr, strchr(msg->topic + 1, '/'), payload.size(), payload.c_str(), 0, false);
                 if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
                     spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));

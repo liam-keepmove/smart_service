@@ -33,9 +33,21 @@ NOTE: 一些服务依赖库已经编译好(linux-arm64)并放置在third目录�
 7. 查看服务是否开机自启动:systemctl is-enabled hljb_smart_service.service
 
 ### 配置文件编辑规则
-1. 配置文件为yaml格式,文件名为config.yml,放置在程序当前目录下
-2. robot_id: 机器人行动本体的id,控制前进后退等动作时需要用到,必须存在
-3. modules: 机器人上的设备模块,例如云台,可以不存在
-
+配置文件为yaml格式,文件名为config.yml,必须和程序放置在同一目录下
+```
+broker_ip: 127.0.0.1
+broker_port: 1883
+broker_username: admin
+broker_password: abcd1234
+broker_keep_alive: 10
+mqtt_client_id: mosquitto_hj
+battery_threshold: 20  #自动去充电的电量阈值
+robot_type: TrackRobot  #机器人类型,挂轨机器人为TrackRobot,Pad机器人为Pad
+robot_id: 2885688118 #机器人本体的id
+modules: #一个数组,表示机器人上的可选设备模块,例如云台,若没有可选设备模块,则此数组为空
+- type: PanTilt #设备类型
+  name: 1467438888 #设备名称,目前直接填设备id即可
+  id: 1467438888 #设备id
+```
 ### 日志相关操作
 日志保存在程序当前目录下的logs目录中,日志文件名为smart_service.log
