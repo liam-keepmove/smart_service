@@ -9,11 +9,11 @@
 #include <spdlog/spdlog.h>
 extern config_item global_config;
 
-// 根据timed_task_list更新cron_file和task_file
+// 根据timed_task_list更新cron_file和task_file,注:不会对齐cron_file和task_file,即task_file_path中可能存在cron_file_path中不存在的任务文件,但其不会被执行
 void timed_task_set::update_file() {
-    // 删除timed_task目录下的所有文件,重新生成,以保证任务文件和cron_file一致
-    std::filesystem::remove_all(task_file_path);
-    std::filesystem::create_directory(task_file_path);
+    if (!std::filesystem::exists(task_file_path)) {
+        std::filesystem::create_directory(task_file_path);
+    }
     std::ofstream cron_file(cron_file_path);
     if (!cron_file.is_open()) {
         THROW_RUNTIME_ERROR("Unable to open cron_file:" + cron_file_path);
