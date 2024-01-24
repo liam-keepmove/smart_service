@@ -74,7 +74,11 @@ timed_task_set::timed_task_set(const std::string& cron_file_path, const std::str
                     if (!f.is_open()) {
                         THROW_RUNTIME_ERROR("Unable to open task_file:" + task_file);
                     }
-                    timed_task_list.emplace_back(json::parse(f));
+                    try {
+                        timed_task_list.emplace_back(json::parse(f));
+                    } catch (...) {
+                        spdlog::error("Unable to parse task_file:{}", task_file);
+                    }
                     f.close();
                 }
             }

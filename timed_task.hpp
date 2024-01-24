@@ -12,7 +12,7 @@ private:
     const std::string task_recv_topic;
     std::vector<json> timed_task_list;
 
-    // 根据timed_task_list更新cron_file和task_file
+    // 根据timed_task_list更新cron_file和task_file,注:不会对齐cron_file和task_file,即task_file_path中可能存在cron_file_path中不存在的任务文件,但其不会被执行
     void update_file();
 
 public:
