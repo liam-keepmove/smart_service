@@ -3,12 +3,12 @@ broker_port: 1883
 broker_username: admin
 broker_password: abcd1234
 broker_keep_alive: 10
-mqtt_client_id: mosquitto_hj
+mqtt_client_id: SShj
 battery_threshold: 20
-robot_type: Pad
+robot_type: TrackRobot
 robot_id: 2885688118
 modules:
 - type: PanTilt
-  name: 1467438888
+  name: 146743888
   id: 1467438888
 

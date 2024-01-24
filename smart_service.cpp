@@ -28,11 +28,11 @@ public:
     std::string task_recv_topic = "/SmartSer/Robot/Task/" + robot_id;           // 订阅
     std::string task_feedback_topic = "/SmartSer/Robot/TaskStatus/" + robot_id; // 发送
     std::string task_debug_topic = "/SmartSer/Debug";                           // 订阅
-    std::string heart_forward_topic = "/SmartSer/Robot/Heart/" + robot_id;      // 订阅
+    std::string heart_forward_topic = "/SmartSer/Robot/Heart/" + robot_id;      // 订阅,替换时间戳后转发
+    std::string direct_forward_topic = "/SmartSer/Robot/CtrlOther/" + robot_id; // 订阅,直接转发
     std::vector<std::string> real_ctrl_forward_topics = {
-        // 订阅
+        // 订阅,停止当前任务后转发
         "/SmartSer/Robot/CtrlMove/" + robot_id,
-        "/SmartSer/Robot/CtrlOther/" + robot_id,
     };
     timed_task_set timed_set{"/etc/cron.d/timed_task_robot", task_recv_topic}; // crontab的定时任务文件
     task current_task;
@@ -88,6 +88,12 @@ public:
 
             spdlog::info("Prepare to subscribe {} topics.", object->heart_forward_topic);
             rc = mosquitto_subscribe(mosq, nullptr, object->heart_forward_topic.c_str(), 2);
+            if (rc != MOSQ_ERR_SUCCESS) {
+                THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
+            }
+
+            spdlog::info("Prepare to subscribe {} topics.", object->direct_forward_topic);
+            rc = mosquitto_subscribe(mosq, nullptr, object->direct_forward_topic.c_str(), 2);
             if (rc != MOSQ_ERR_SUCCESS) {
                 THROW_RUNTIME_ERROR(std::string("Subscription failure:") + mosquitto_strerror(rc));
             }
@@ -333,6 +339,13 @@ public:
                     spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
                     spdlog::error("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
                 }
+            } else if (strcmp(msg->topic, direct_forward_topic.c_str()) == 0) { // 直接转发
+                spdlog::info("forward:{}->{}", msg->topic, strchr(msg->topic + 1, '/'));
+                int rc = mosquitto_publish(mosq, nullptr, strchr(msg->topic + 1, '/'), msg->payloadlen, msg->payload, 2, false);
+                if (rc != MOSQ_ERR_SUCCESS) { // if the resulting packet would be larger than supported by the broker.
+                    spdlog::error("Failed to publish message:{} ", mosquitto_strerror(rc));
+                    spdlog::error("Wait for \"mosquitto_loop_start()\" function to reconnect automatically");
+                }
             } else if (std::find_if(real_ctrl_forward_topics.begin(), real_ctrl_forward_topics.end(), [msg](const std::string& topic) { return std::strcmp(msg->topic, topic.c_str()) == 0; }) != real_ctrl_forward_topics.end()) {
                 // 实时控制
                 real_time_ctrl_handler(msg);
@@ -380,6 +393,7 @@ public:
 };
 
 int main() {
+    spdlog::set_level(spdlog::level::info);
     robot bot;
     if (global_config.robot_type == "TrackRobot") {
         bot.add_device(global_config.robot_id, std::make_unique<robot_device::action_body_mqtt>(global_config.robot_id));

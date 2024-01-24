@@ -132,15 +132,19 @@ json action_body_mqtt::location_speed_move(const json& args) {
         [](struct mosquitto* mosq, void* obj, const struct mosquitto_message* message) -> int {
             auto object = (mos_obj*)obj;
             auto elapsed = (std::chrono::duration_cast<std::chrono::seconds>)(std::chrono::steady_clock::now() - object->last_recv_time);
+            spdlog::debug("elapsed is {} second.", elapsed.count());
             if (elapsed > 3s) {
+                spdlog::debug("elapsed > 3s");
                 auto msg = (mosquitto_message*)malloc(sizeof(mosquitto_message));
                 mosquitto_message_copy(msg, message);
                 object->msg_queue.push(msg);
                 object->last_recv_time = std::chrono::steady_clock::now();
+            } else {
+                spdlog::debug("elapsed <= 3s.");
             }
             return object->done ? delete object, 1 : 0;
         },
-        object, robot_position_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
+        object, robot_position_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "SSGetPosition", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
         .detach();
 
     json result;
@@ -148,6 +152,8 @@ json action_body_mqtt::location_speed_move(const json& args) {
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
+            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": true}}", current_location));
+            break;
         }
 
         if (status == RUNNING) {
@@ -157,18 +163,17 @@ json action_body_mqtt::location_speed_move(const json& args) {
 
                 current_location = msg_json.at("position").get<int>();
                 spdlog::info("current_location:{},target_location:{}", current_location, target_location);
-                // 在20mm误差之内,意味着到达位置了,否则就是未到达位置.
+                // 在40mm误差之内,意味着到达位置了,否则就是未到达位置.
                 if (std::abs(current_location - target_location) <= 40) {
-                    object->done = true;
                     result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
                     break;
                 }
+            } else {
+                spdlog::debug("timeout and not recv position msg.");
             }
-        } else if (status == STOPPED) {
-            result = json::parse(fmt::format("{{\"position\": {},\"emergency_stop\": true}}", current_location));
-            break;
         }
     }
+    object->done = true;
     status = STOPPED;
     return result;
 }
@@ -196,7 +201,7 @@ json action_body_mqtt::to_charge(const json& args) {
             }
             return object->done ? delete object, 1 : 0;
         },
-        object, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "get_battery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
+        object, robot_battery_topic.c_str(), 0, global_config.broker_ip.c_str(), global_config.broker_port, "SSGetBattery", 10, true, global_config.broker_username.c_str(), global_config.broker_password.c_str(), nullptr, nullptr)
         .detach();
 
     json result;
@@ -204,6 +209,8 @@ json action_body_mqtt::to_charge(const json& args) {
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
+            result = json::parse(fmt::format("{{\"emergency_stop\": true}}"));
+            break;
         }
 
         if (status == RUNNING) {
@@ -225,16 +232,13 @@ json action_body_mqtt::to_charge(const json& args) {
                     }
                 }
                 if (all_battery_full == 1) {
-                    object->done = true;
                     result = json::parse(fmt::format("{{\"battery_full\": true}}"));
                     break;
                 }
             }
-        } else if (status == STOPPED) {
-            result = json::parse(fmt::format("{{\"emergency_stop\": true}}"));
-            break;
         }
     }
+    object->done = true;
     status = STOPPED;
     return result;
 }
