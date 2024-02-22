@@ -113,14 +113,13 @@ json task::generate_feedback(int active_no, int status, const std::string& resul
 void task::run(robot& qibot) {
     std::scoped_lock lock(run_sche); // 同一时刻,只能有一个调度器在运行
     using namespace std::chrono_literals;
+    ++executed_count;
     task_will_start_callback(generate_feedback(0, START, "", "The task will start.", tag)); // 任务将要开始的反馈
-    if (executed_count >= max_count) {
+    if (executed_count > max_count) {                                                       // 等于仍然需要继续执行,因为只是更改了已执行次数,但实际还未执行,仍在此次任务执行次数的范围内
         status = END;
         // 任务结束回调
         over_callback(generate_feedback(active_no, END, "The number of tasks that can be executed is insufficient.", remark, tag));
         return;
-    } else {
-        ++executed_count;
     }
     this->bot = &qibot;
     active_no = 0;

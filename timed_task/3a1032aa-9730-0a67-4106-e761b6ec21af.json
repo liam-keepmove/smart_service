@@ -1,0 +1,22 @@
+{
+    "action_list": [
+        {
+            "active_args": {
+                "arg": "{\"speed\":0.2,\"position\": 150000}"
+            },
+            "active_code": "TrackRobotMovePosition",
+            "device_code": "2885688118",
+            "no": 1,
+            "remark": "以位置模式到150米",
+            "tag": ""
+        }
+    ],
+    "cron": "*/5 * * * *",
+    "executed_count": 154,
+    "id": "3a1032aa-9730-0a67-4106-e761b6ec21af",
+    "max_count": 99999,
+    "priority": 999,
+    "remark": null,
+    "tag": "{\"action_type\":\"TrackRobotMovePosition\",\"NavTaskId\":\"3a1032aa-9730-0a67-4106-e761b6ec21af\",\"StepNo\":null,\"ActionNo\":null}",
+    "type": 3
+}

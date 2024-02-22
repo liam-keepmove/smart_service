@@ -3,4 +3,6 @@
 /*.tar
 /*.o
 /*.out
+/html/
+/Doxygen.config
 !.gitkeep

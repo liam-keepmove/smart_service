@@ -18,14 +18,17 @@ void timed_task_set::update_file() {
     if (!cron_file.is_open()) {
         THROW_RUNTIME_ERROR("Unable to open cron_file:" + cron_file_path);
     }
-    cron_file << "SHELL=/bin/bash" << std::endl;
-    cron_file << "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" << std::endl;
-    cron_file << "WORK_DIR=" << std::filesystem::current_path() << std::endl;
+    cron_file << "SHELL=/bin/bash\n"
+              << "PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin\n"
+              << "MAILTO=\"\"\n"
+              << "CRON_TZ=Asia/Shanghai\n"
+              << "TZ=Asia/Shanghai\n"
+              << "WORK_DIR=" << std::filesystem::current_path() << std::endl;
 
     for (const auto& task : timed_task_list) {
         std::string task_id = task.at("id").get<std::string>();
         std::string cron_expr = task.at("cron").get<std::string>();
-        std::string command = fmt::format("cd ${{WORK_DIR}} && cat ./timed_task/{}.json | ./mqttx pub -V 3.1.1 --username '{}' --password '{}' -h '{}' -p {} -t '{}' -q 2 --stdin",
+        std::string command = fmt::format("cd ${{WORK_DIR}} && mkdir -p logs && cat ./timed_task/{}.json | ./mqttx pub -V 3.1.1 --username '{}' --password '{}' -h '{}' -p {} -t '{}' -q 2 --stdin &>> ./logs/cron.log",
                                           task.at("id").template get<std::string>(), global_config.broker_username, global_config.broker_password, global_config.broker_ip, global_config.broker_port, task_recv_topic);
         cron_file << cron_expr << " root " << command << std::endl;
         std::ofstream task_file(task_file_path + task_id + ".json"); // 创建./timed_task/xxx.json

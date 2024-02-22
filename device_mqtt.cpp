@@ -116,15 +116,15 @@ json action_body_mqtt::speed_back_move(const json& args) {
     return json();
 }
 
-// 位置模式,到达位置后才返回,结果包含到达的位置 {"action":3,"arg":{"speed":0.5,"position":1500}}
+// 位置模式,posista不为0(位置模式结束)才返回,结果包含到达的位置 {"action":3,"arg":{"speed":0.5,"position":1500}}
 json action_body_mqtt::location_speed_move(const json& args) {
     status = RUNNING;
     json command = args;
     command["action"] = 3;
     std::string payload = command.dump();
     mqtt_pub(robot_ctrl_move_topic, payload);
+    std::this_thread::sleep_for(1s); // 等待位置模式的状态初始化一下
 
-    int current_location = 0;
     const int target_location = command.at("arg").at("position").template get<int>();
     mos_obj* object = new mos_obj();
     std::thread(
@@ -149,6 +149,8 @@ json action_body_mqtt::location_speed_move(const json& args) {
 
     json result;
     mosquitto_message* msg;
+    int current_location = 0;
+    int location_mode_status = 0;
     while (true) {
         if (REQ_STOP == request) {
             status = STOPPED;
@@ -162,9 +164,10 @@ json action_body_mqtt::location_speed_move(const json& args) {
                 mosquitto_message_free(&msg);
 
                 current_location = msg_json.at("position").get<int>();
-                spdlog::info("current_location:{},target_location:{}", current_location, target_location);
-                // 在40mm误差之内,意味着到达位置了,否则就是未到达位置.
-                if (std::abs(current_location - target_location) <= 40) {
+                location_mode_status = msg_json.at("posista").get<int>();
+                spdlog::info("current_location:{},target_location:{},location_mode_status:{}", current_location, target_location, location_mode_status);
+                // 当posista不为0,意味着位置模式结束了(到达位置,刷到前/后限卡),否则就是位置模式未结束.
+                if (location_mode_status != 0) {
                     result = json::parse(fmt::format("{{\"position\": {}}}", current_location));
                     break;
                 }
